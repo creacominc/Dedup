@@ -12,18 +12,26 @@ struct ContentView: View {
     
     @State var trgPath : URL?
     @State var showFileChooser = false
-    @State var files : [FileData] = [
-        //        FileData(path: "First", size: 1, checksum: "aaaa", sumSize: 1),
-        //        FileData(path: "Second", size: 2, checksum: "bbbb", sumSize: 2),
-        //        FileData(path: "Third", size: 3, checksum: "cccc", sumSize: 3),
-        //        FileData(path: "Fourth", size: 4, checksum: "dddd", sumSize: 4),
-    ]
+    @State var files : [FileData] = [ ]
     let exclusions : [String] = [
         ".ssh",
         ".DS_Store",
         "#recycle"
     ]
-    
+    let fileKeys : [URLResourceKey] = [
+        URLResourceKey.nameKey,
+        URLResourceKey.isDirectoryKey,
+        URLResourceKey.contentModificationDateKey,
+        URLResourceKey.creationDateKey,
+        URLResourceKey.fileAllocatedSizeKey,
+        URLResourceKey.fileSizeKey,
+        URLResourceKey.isAliasFileKey,
+        URLResourceKey.isDirectoryKey,
+        URLResourceKey.isReadableKey,
+        URLResourceKey.isRegularFileKey,
+        URLResourceKey.isSymbolicLinkKey,
+    ]
+
     var body: some View
     {
         VStack
@@ -54,7 +62,7 @@ struct ContentView: View {
                     self.files.removeAll()
                     let fm = FileManager.default
                     addFiles(pathURL: self.trgPath, fm: fm)
-                    print( "done loop" )
+                    print( "done adding files.  comparing." )
                 }
                 ScrollView
                 {
@@ -80,14 +88,12 @@ struct ContentView: View {
     {
         do {
             // is it nil
-            // print( "addFiles: URL = \(String(describing: pathURL))" )
             if( pathURL == nil )
             {
                 print( "addFiles: path is nil, returning." )
                 return
             }
             let path : String = pathURL!.path(percentEncoded: false)
-            print( "addFiles: Path = \(path)" )
             // does it exist
             var isDirectory = ObjCBool(false)
             let exists = fm.fileExists(atPath: path, isDirectory: &isDirectory)
@@ -99,25 +105,30 @@ struct ContentView: View {
             // file exists, if it is in the exclusion list, ignore it.
             if( exclusions.contains( pathURL!.lastPathComponent ) )
             {
-                print( "Excluding path \(path) due to \(pathURL!.lastPathComponent)")
                 return
             }
             // file exists, if it is a folder, add it to the list
             if( isDirectory.boolValue == false )
             {
-                print("Found \(path)")
+                // get the file size
+                let fileAttributes = try pathURL?.resourceValues(forKeys: Set(self.fileKeys) )
                 self.files.append(
-                    FileData(path: path, size: 0, checksum: "", sumSize: 0)
+                    FileData(path: path
+                             , size: Int64(fileAttributes!.fileSize!)
+                             , checksum: ""
+                             , sumSize: 0)
                 )
             }
             else
             {
                 // recursive search of directories
-                let items = try fm.contentsOfDirectory(atPath: path)
+                let items = try fm.contentsOfDirectory(
+                    at: pathURL!,
+                    includingPropertiesForKeys: self.fileKeys
+                )
                 for item in items
                 {
-                    let content : URL = (pathURL!.appending(path: item))
-                    addFiles( pathURL: content, fm: fm )
+                    addFiles( pathURL: item, fm: fm )
                 }
             }
         } catch {
