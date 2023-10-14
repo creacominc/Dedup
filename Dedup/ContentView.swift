@@ -13,10 +13,10 @@ struct ContentView: View {
     @State var path : String = "/"
     @State var showFileChooser = false
     @State var files : [FileData] = [
-//        FileData(path: "First", size: 1, checksum: "aaaa", sumSize: 1),
-//        FileData(path: "Second", size: 2, checksum: "bbbb", sumSize: 2),
-//        FileData(path: "Third", size: 3, checksum: "cccc", sumSize: 3),
-//        FileData(path: "Fourth", size: 4, checksum: "dddd", sumSize: 4),
+        FileData(path: "First", size: 1, checksum: "aaaa", sumSize: 1),
+        FileData(path: "Second", size: 2, checksum: "bbbb", sumSize: 2),
+        FileData(path: "Third", size: 3, checksum: "cccc", sumSize: 3),
+        FileData(path: "Fourth", size: 4, checksum: "dddd", sumSize: 4),
     ]
 
     var body: some View
