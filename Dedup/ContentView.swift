@@ -7,8 +7,6 @@
 
 import SwiftUI
 import Foundation
-import CryptoKit
-import CommonCrypto
 
 struct ContentView: View {
     
@@ -68,7 +66,7 @@ struct ContentView: View {
                     let fm = FileManager.default
                     self.addFiles(pathURL: self.trgPath, fm: fm)
                     print( "done adding files.  comparing." )
-                    //self.compareFiles()
+                    self.compareFiles()
                 }
                 ScrollView
                 {
@@ -81,11 +79,8 @@ struct ContentView: View {
                     }
                 }
             }
-            // Third row:  Error window
-//            HStack
-//            {
-//                
-//            }
+            // Third row:  Results window
+            
         }
         .padding()
     }
@@ -121,14 +116,12 @@ struct ContentView: View {
                 let fileAttributes = try pathURL?.resourceValues(forKeys: Set(self.fileKeys) )
                 let fileSize : Int = fileAttributes!.fileSize!
                 let fileData : FileData = FileData(path: pathURL!
-                                                   , size: fileSize
-                                                   , checksum: Data(count: Int(CC_SHA256_DIGEST_LENGTH))
-                                                   , sumSize: 0)
+                                                   , size: fileSize)
                 self.files.append( fileData )
                 if( self.duplicates[ fileSize ] == nil )
                 {
                     self.duplicates[ fileSize ] = [ fileData ]
-                    //print( "Created new list for size: \(fileSize) -> \(path)" )
+                    print( "Created new list for size: \(fileSize) -> \(path)" )
                 }
                 else
                 {
@@ -136,23 +129,23 @@ struct ContentView: View {
                     if( self.duplicates[ fileSize ]!.count == 1 )
                     {
                         // the first was not yet checksummed.  do it now.
-                        let firstRes : Data = md5File( url: self.duplicates[fileSize]![0].path )!
+                        let firstRes : Data = self.duplicates[fileSize]![0].md5File()!
                         var dsVal : String = ""
                         firstRes.forEach({ (val) in
-                            //print(val)
                             dsVal.append( String(format: "%02hhx", val) )
                         })
 
                         self.duplicates[ fileSize ]![0].checksum = firstRes
+                        print( "first sum: \(dsVal)")
                     }
                     self.duplicates[fileSize]?.append( fileData )
-                    let currentRes : Data = md5File(url: pathURL! )!
+                    let currentRes : Data = fileData.md5File()!
                     var nsVal : String = ""
 
                     currentRes.forEach({ (val) in
                         nsVal.append( String(format: "%02hhx", val) )
                     })
-
+                    print( "current sum: \(nsVal)")
                 }
             }
             else
@@ -173,45 +166,13 @@ struct ContentView: View {
         }
     }
 
-//
-//    func compareFiles()
-//    {
-//        // for each entry in self.files, add to a map of size->FileData[]
-//    }
 
-
-    func md5File(url: URL) -> Data? {
-        let bufferSize = 1024 * 1024
-        do {
-            // Open file for reading:
-            let file = try FileHandle(forReadingFrom: url)
-            defer {
-                file.closeFile()
-            }
-            // Create and initialize MD5 context:
-            var context = CC_MD5_CTX()
-            CC_MD5_Init(&context)
-            // Read up to `bufferSize` bytes, until EOF is reached, and update MD5 context:
-            while autoreleasepool(invoking: {
-                let data = file.readData(ofLength: bufferSize)
-                if data.count > 0 {
-                    data.withUnsafeBytes {
-                        _ = CC_MD5_Update(&context, $0.baseAddress, numericCast(data.count))
-                    }
-                    return true // Continue
-                } else {
-                    return false // End of file
-                }
-            }) { }
-            // Compute the MD5 digest:
-            var digest: [UInt8] = Array(repeating: 0, count: Int(CC_MD5_DIGEST_LENGTH))
-            _ = CC_MD5_Final(&digest, &context)
-            return Data(digest)
-        } catch {
-            print("Cannot open file:", error.localizedDescription)
-            return nil
-        }
+    func compareFiles()
+    {
+        // for each entry in self.files, add to a map of size->FileData[]
     }
+
+
 
 }
 
