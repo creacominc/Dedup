@@ -51,11 +51,11 @@ struct ContentView: View {
                     {
                         self.trgPath = panel.url
                     }
-                    print( "path: \(String(describing: self.trgPath))" )
+                    //print( "path: \(self.trgPath!.path(percentEncoded: false))" )
                     self.files.removeAll(keepingCapacity: true)
                     self.duplicates.removeAll(keepingCapacity: true)
                 }
-                Text(  verbatim: self.trgPath?.absoluteString ?? "nil" )
+                Text(  verbatim: self.trgPath?.path(percentEncoded: false) ?? "nil" )
             }
             // Second Row:  Start button and scroll view.
             HStack
@@ -68,7 +68,6 @@ struct ContentView: View {
                     let fm = FileManager.default
                     self.addFiles(pathURL: self.trgPath, fm: fm)
                     print( "done adding files.  comparing." )
-                    // create a map of file size to file object and add duplicates to list
                     //self.compareFiles()
                 }
                 ScrollView
@@ -77,7 +76,7 @@ struct ContentView: View {
                     {
                         ForEach( self.files )
                         { element in
-                            Text( element.path.absoluteString )
+                            Text( element.path.path(percentEncoded: false) )
                         }
                     }
                 }
@@ -129,7 +128,7 @@ struct ContentView: View {
                 if( self.duplicates[ fileSize ] == nil )
                 {
                     self.duplicates[ fileSize ] = [ fileData ]
-                    print( "Created new list for size: \(fileSize) -> \(path)" )
+                    //print( "Created new list for size: \(fileSize) -> \(path)" )
                 }
                 else
                 {
@@ -137,19 +136,12 @@ struct ContentView: View {
                     if( self.duplicates[ fileSize ]!.count == 1 )
                     {
                         // the first was not yet checksummed.  do it now.
-//                        let firstRes = self.sha256(url: self.duplicates[fileSize]![0].path
-//                                              , bufferSize: self.duplicates[ fileSize ]![0].sumSize )
                         let firstRes : Data = md5File( url: self.duplicates[fileSize]![0].path )!
-//                        let dsVal : String = (firstRes.base64EncodedString())
                         var dsVal : String = ""
                         firstRes.forEach({ (val) in
                             //print(val)
                             dsVal.append( String(format: "%02hhx", val) )
                         })
-
-                        print( "  First chk: \(dsVal) - \(self.duplicates[fileSize]![0].path.path(percentEncoded: false))")
-                        
-                        print( "First size: \(fileSize) - \(self.duplicates[fileSize]![0].path)")
 
                         self.duplicates[ fileSize ]![0].checksum = firstRes
                     }
@@ -158,13 +150,9 @@ struct ContentView: View {
                     var nsVal : String = ""
 
                     currentRes.forEach({ (val) in
-                        //print(val)
                         nsVal.append( String(format: "%02hhx", val) )
                     })
 
-                    print( "Current chk: \(nsVal) - \(pathURL!.path)")
-//                    print( "Current size: \(fileSize) - \(pathURL!.path)")
-                    //print( "Adding entry for size: \(fileSize) -> \(path)" )
                 }
             }
             else
@@ -184,49 +172,6 @@ struct ContentView: View {
             print( "ERROR:  Failed to handle the search - \(error)" )
         }
     }
-
-    /**
-           Taken from https://stackoverflow.com/questions/42935148/swift-calculate-md5-checksum-for-large-files
-     */
-//    func sha256( url: URL, bufferSize: Int ) -> Data?
-//    {
-//        do 
-//        {
-//            // Open file for reading:
-//            let file = try FileHandle(forReadingFrom: url)
-//            defer {
-//                file.closeFile()
-//            }
-//            // Create and initialize SHA256 context:
-//            var context = CC_SHA256_CTX()
-//            CC_SHA256_Init(&context)
-//            // Read up to `bufferSize` bytes, until EOF is reached, and update SHA256 context:
-//            while autoreleasepool(invoking: {
-//                // Read up to `bufferSize` bytes
-//                let data = file.readData(ofLength: bufferSize)
-//                if data.count > 0 {
-//                    data.withUnsafeBytes {
-//                        _ = CC_SHA256_Update(&context, $0, numericCast(data.count))
-//                    }
-//                    // Continue
-//                    return true
-//                } else {
-//                    // End of file
-//                    return false
-//                }
-//            }) { }
-//            // Compute the SHA256 digest:
-//            var digest = Data(count: Int(CC_SHA256_DIGEST_LENGTH))
-//            digest.withUnsafeMutableBytes {
-//                _ = CC_SHA256_Final($0, &context)
-//            }
-//            return digest
-//        } catch {
-//            print(error)
-//            return nil
-//        }
-//    }
-
 
 //
 //    func compareFiles()
