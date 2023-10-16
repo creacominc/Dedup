@@ -10,8 +10,8 @@ import Foundation
 struct FileData: Identifiable
 {
     let id = UUID()
-    var path: String
-    var size: Int64
-    var checksum: String
-    var sumSize:  Int64
+    var path: URL
+    var size: Int
+    var checksum: Data
+    var sumSize:  Int
 }
