@@ -12,7 +12,7 @@ struct ContentView: View {
     
     @State var trgPath : URL?
     @State var files : [FileData] = []
-    @State var duplicates : [ Int: [ String: [FileData] ] ] = [:]
+    @State var duplicates : [ Int: [FileData] ] = [:]
     @State var results : [ResultData] = []
     let exclusions : [String] = [
         ".ssh",
@@ -20,14 +20,13 @@ struct ContentView: View {
         "#recycle"
     ]
     let fileKeys : [URLResourceKey] = [
-        URLResourceKey.nameKey,
+        URLResourceKey.fileSizeKey,
         URLResourceKey.isDirectoryKey,
+        URLResourceKey.nameKey,
         URLResourceKey.contentModificationDateKey,
         URLResourceKey.creationDateKey,
         URLResourceKey.fileAllocatedSizeKey,
-        URLResourceKey.fileSizeKey,
         URLResourceKey.isAliasFileKey,
-        URLResourceKey.isDirectoryKey,
         URLResourceKey.isReadableKey,
         URLResourceKey.isRegularFileKey,
         URLResourceKey.isSymbolicLinkKey,
@@ -88,8 +87,6 @@ struct ContentView: View {
                     ForEach( self.results )
                     {
                         element in
-                        if( element.count > 0 )
-                        {
                             HStack
                             {
                                 Text( "Size: \(element.size)" )
@@ -97,7 +94,6 @@ struct ContentView: View {
                                 Text( "Count: \(element.count)" )
                                 Text( "Files: " + element.files )
                             }
-                        }
                     }
                 }
             }
@@ -107,18 +103,52 @@ struct ContentView: View {
 
     func compare()
     {
+        self.results.removeAll(keepingCapacity: true)
         // iterate over duplicates to populate results
-        self.duplicates.forEach { (fsize: Int, csums: [String : [FileData]]) in
-            csums.forEach { (csum: String, files: [FileData]) in
-                if( files.count >= 0 )
+        self.duplicates.forEach { (fsize: Int, files: [FileData]) in
+            if( files.count > 1 )
+            {
+                print("Processing \(files.count) files of size \(fsize)")
+                var checksumMap : [String : [FileData] ] = [:]
+                // collect the checksums in a set whose size will equal the files.count when there are no duplicates
+                while(( checksumMap.count != files.count ) && (files[0].bytesRead < files[0].size))
                 {
-                    let result : ResultData = ResultData( size: fsize, checksum: csum )
-                    var separator : String = ""
-                    files.forEach { fileData in
-                        result.files += separator + fileData.path.path(percentEncoded: false)
-                        separator = ", "
+                    print( "files[0].bytesRead = \(files[0].bytesRead), files[0].size = \(files[0].size)" )
+                    // perform initial md5 on all files of this size and save to set.
+                    checksumMap.removeAll(keepingCapacity: true)
+                    files.forEach { file in
+                        file.md5()
+                        if( checksumMap[file.checksum] == nil )
+                        {
+                            checksumMap[file.checksum] = [file]
+                            print( "created checksumMap for checksum: \(file.checksum) for file: \(file.path)")
+                        }
+                        else
+                        {
+                            checksumMap[file.checksum]!.append( file )
+                            print( "adding to checksum: \(file.checksum)   file: \(file.path)")
+                        }
                     }
-                    self.results.append( result )
+                }
+                // if there are duplicates we will have read the entire of these files. compare the size
+                if(files[0].bytesRead == files[0].size)
+                {
+                    print( "complete read of \(files[0].bytesRead)" )
+                    // iterate over the checksumMap to find the duplicates
+                    checksumMap.forEach { (csum: String, files: [FileData]) in
+                        print("files.count = \(files.count) for checksum \(csum)" )
+                        if( files.count > 1 )
+                        {
+                            let result : ResultData = ResultData( size: fsize, checksum: csum )
+                            var separator : String = ""
+                            files.forEach { fileData in
+                                result.files += separator + fileData.path.path(percentEncoded: false)
+                                separator = ", "
+                            }
+                            print( "result \(result.size), \(result.checksum), \(result.files)" )
+                            self.results.append( result )
+                        }
+                    }
                 }
             }
         }
@@ -134,7 +164,7 @@ struct ContentView: View {
                 return
             }
             let path : String = pathURL!.path(percentEncoded: false)
-            // does it exist
+            // does it exist and is it a folder
             var isDirectory = ObjCBool(false)
             let exists = fm.fileExists(atPath: path, isDirectory: &isDirectory)
             if( exists == false )
@@ -150,27 +180,16 @@ struct ContentView: View {
             // file exists, if it is a folder, add it to the list
             if( isDirectory.boolValue == false )
             {
-                // get the file size
-                let fileAttributes = try pathURL?.resourceValues(forKeys: Set(self.fileKeys) )
-                let fileSize : Int = fileAttributes!.fileSize!
-                let fileData : FileData = FileData(path: pathURL!
-                                                   , size: fileSize)
+                let fileData : FileData = FileData( path: pathURL! )
                 self.files.append( fileData )
-                if( self.duplicates[ fileSize ] == nil )
+                if( self.duplicates[ fileData.size ] == nil )
                 {
-                    self.duplicates[ fileSize ] = [ fileData.checksum: [fileData] ]
-                    print( "Created new list for size: \(fileSize) -> \(path)" )
+                    self.duplicates[ fileData.size ] = [fileData]
+                    print( "Created new list for size: \(fileData.size) -> \(path)" )
                 }
                 else
                 {
-                    if( self.duplicates[ fileSize ]![ fileData.checksum ] == nil )
-                    {
-                        self.duplicates[ fileSize ]![ fileData.checksum ] = [fileData]
-                    }
-                    else
-                    {
-                        self.duplicates[ fileSize ]![ fileData.checksum ]!.append( fileData )
-                    }
+                    self.duplicates[ fileData.size ]!.append( fileData )
                 }
             }
             else
