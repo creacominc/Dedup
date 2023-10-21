@@ -14,18 +14,14 @@ class FileData: Identifiable
     let id = UUID()
     var path: URL
     var size: Int
-    var checksum: Data
-    
+    var checksum: String
+
     init( path : URL, size : Int )
     {
         self.path = path
         self.size = size
-        
-        self.checksum = Data(count: Int(CC_SHA256_DIGEST_LENGTH))
-    }
-    
-    func md5File() -> Data?
-    {
+        self.checksum = ""
+
         let bufferSize = 1024 * 1024
         do {
             // Open file for reading:
@@ -51,12 +47,13 @@ class FileData: Identifiable
             // Compute the MD5 digest:
             var digest: [UInt8] = Array(repeating: 0, count: Int(CC_MD5_DIGEST_LENGTH))
             _ = CC_MD5_Final(&digest, &context)
-            return Data(digest)
+
+            digest.forEach({ (val) in
+                self.checksum.append( String(format: "%02hhx", val) )
+            })
         } catch {
             print("Cannot open file:", error.localizedDescription)
-            return nil
         }
     }
-
     
 }

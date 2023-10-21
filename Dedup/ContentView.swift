@@ -12,7 +12,8 @@ struct ContentView: View {
     
     @State var trgPath : URL?
     @State var files : [FileData] = []
-    @State var duplicates : [ Int: [FileData] ] = [:]
+    @State var duplicates : [ Int: [ String: [FileData] ] ] = [:]
+    @State var results : [ResultData] = []
     let exclusions : [String] = [
         ".ssh",
         ".DS_Store",
@@ -66,7 +67,7 @@ struct ContentView: View {
                     let fm = FileManager.default
                     self.addFiles(pathURL: self.trgPath, fm: fm)
                     print( "done adding files.  comparing." )
-                    self.compareFiles()
+                    self.compare()
                 }
                 ScrollView
                 {
@@ -80,11 +81,48 @@ struct ContentView: View {
                 }
             }
             // Third row:  Results window
-            
+            ScrollView
+            {
+                VStack(alignment: .leading)
+                {
+                    ForEach( self.results )
+                    {
+                        element in
+                        if( element.count > 0 )
+                        {
+                            HStack
+                            {
+                                Text( "Size: \(element.size)" )
+                                Text( "Sum: " + element.checksum )
+                                Text( "Count: \(element.count)" )
+                                Text( "Files: " + element.files )
+                            }
+                        }
+                    }
+                }
+            }
         }
         .padding()
     }
 
+    func compare()
+    {
+        // iterate over duplicates to populate results
+        self.duplicates.forEach { (fsize: Int, csums: [String : [FileData]]) in
+            csums.forEach { (csum: String, files: [FileData]) in
+                if( files.count >= 0 )
+                {
+                    let result : ResultData = ResultData( size: fsize, checksum: csum )
+                    var separator : String = ""
+                    files.forEach { fileData in
+                        result.files += separator + fileData.path.path(percentEncoded: false)
+                        separator = ", "
+                    }
+                    self.results.append( result )
+                }
+            }
+        }
+    }
 
     func addFiles( pathURL : URL?, fm : FileManager )
     {
@@ -120,32 +158,19 @@ struct ContentView: View {
                 self.files.append( fileData )
                 if( self.duplicates[ fileSize ] == nil )
                 {
-                    self.duplicates[ fileSize ] = [ fileData ]
+                    self.duplicates[ fileSize ] = [ fileData.checksum: [fileData] ]
                     print( "Created new list for size: \(fileSize) -> \(path)" )
                 }
                 else
                 {
-                    // if this is the second element, checksum the first.
-                    if( self.duplicates[ fileSize ]!.count == 1 )
+                    if( self.duplicates[ fileSize ]![ fileData.checksum ] == nil )
                     {
-                        // the first was not yet checksummed.  do it now.
-                        let firstRes : Data = self.duplicates[fileSize]![0].md5File()!
-                        var dsVal : String = ""
-                        firstRes.forEach({ (val) in
-                            dsVal.append( String(format: "%02hhx", val) )
-                        })
-
-                        self.duplicates[ fileSize ]![0].checksum = firstRes
-                        print( "first sum: \(dsVal)")
+                        self.duplicates[ fileSize ]![ fileData.checksum ] = [fileData]
                     }
-                    self.duplicates[fileSize]?.append( fileData )
-                    let currentRes : Data = fileData.md5File()!
-                    var nsVal : String = ""
-
-                    currentRes.forEach({ (val) in
-                        nsVal.append( String(format: "%02hhx", val) )
-                    })
-                    print( "current sum: \(nsVal)")
+                    else
+                    {
+                        self.duplicates[ fileSize ]![ fileData.checksum ]!.append( fileData )
+                    }
                 }
             }
             else
@@ -165,14 +190,6 @@ struct ContentView: View {
             print( "ERROR:  Failed to handle the search - \(error)" )
         }
     }
-
-
-    func compareFiles()
-    {
-        // for each entry in self.files, add to a map of size->FileData[]
-    }
-
-
 
 }
 

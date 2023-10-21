@@ -15,6 +15,7 @@
 		3643EF412ACCFE9F007D093D /* DedupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3643EF402ACCFE9F007D093D /* DedupUITests.swift */; };
 		3643EF432ACCFE9F007D093D /* DedupUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3643EF422ACCFE9F007D093D /* DedupUITestsLaunchTests.swift */; };
 		3643EF502ACCFF92007D093D /* FileData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3643EF4F2ACCFF92007D093D /* FileData.swift */; };
+		36EBFC5F2AE214F400D5445B /* ResultData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EBFC5E2AE214F400D5445B /* ResultData.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -47,6 +48,7 @@
 		3643EF402ACCFE9F007D093D /* DedupUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DedupUITests.swift; sourceTree = "<group>"; };
 		3643EF422ACCFE9F007D093D /* DedupUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DedupUITestsLaunchTests.swift; sourceTree = "<group>"; };
 		3643EF4F2ACCFF92007D093D /* FileData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileData.swift; sourceTree = "<group>"; };
+		36EBFC5E2AE214F400D5445B /* ResultData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultData.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,6 +105,7 @@
 				3643EF2A2ACCFE9E007D093D /* Dedup.entitlements */,
 				3643EF2B2ACCFE9F007D093D /* Preview Content */,
 				3643EF4F2ACCFF92007D093D /* FileData.swift */,
+				36EBFC5E2AE214F400D5445B /* ResultData.swift */,
 			);
 			path = Dedup;
 			sourceTree = "<group>";
@@ -264,6 +267,7 @@
 			files = (
 				3643EF272ACCFE9D007D093D /* ContentView.swift in Sources */,
 				3643EF252ACCFE9C007D093D /* DedupApp.swift in Sources */,
+				36EBFC5F2AE214F400D5445B /* ResultData.swift in Sources */,
 				3643EF502ACCFF92007D093D /* FileData.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
