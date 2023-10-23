@@ -8,12 +8,15 @@
 import SwiftUI
 import Foundation
 
-struct ContentView: View {
-    
+
+struct ContentView: View
+{
+
     @State var trgPath : URL?
     @State var files : [FileData] = []
     @State var duplicates : [ Int: [FileData] ] = [:]
     @State var results : [ResultData] = []
+
     let exclusions : [String] = [
         ".ssh",
         ".DS_Store",
@@ -65,8 +68,12 @@ struct ContentView: View {
                     self.duplicates.removeAll(keepingCapacity: true)
                     let fm = FileManager.default
                     self.addFiles(pathURL: self.trgPath, fm: fm)
-                    print( "done adding files.  comparing." )
-                    self.compare()
+                    print( "Done adding files.  comparing." )
+                    self.results.removeAll(keepingCapacity: true)
+                    duplicates.forEach { (fsize: Int, files: [FileData]) in
+                        self.compare( files: files )
+                    }
+                    print( "Done" )
                 }
                 ScrollView
                 {
@@ -85,15 +92,23 @@ struct ContentView: View {
                 VStack(alignment: .leading)
                 {
                     ForEach( self.results )
-                    {
-                        element in
-                            HStack
-                            {
-                                Text( "Size: \(element.size)" )
-                                Text( "Sum: " + element.checksum )
-                                Text( "Count: \(element.count)" )
-                                Text( "Files: " + element.files )
-                            }
+                    { element in
+                        HStack
+                        {
+                            Text( "Size: \(element.size)" )
+                            Text( "Sum: \(element.checksum)" )
+                            Text( "Count: \(element.fcount)" )
+                            Text( element.getFiles() )
+                        }
+//                        element.files.forEach({ file in
+//                            HStack
+//                            {
+//                                Text( "~" )
+//                                Text( "~" )
+//                                Text( "~" )
+//                                Text( "Files: \(file)" )
+//                            }
+//                        })
                     }
                 }
             }
@@ -101,57 +116,70 @@ struct ContentView: View {
         .padding()
     }
 
-    func compare()
+    func compare( files: [FileData] )
     {
-        self.results.removeAll(keepingCapacity: true)
-        // iterate over duplicates to populate results
-        self.duplicates.forEach { (fsize: Int, files: [FileData]) in
-            if( files.count > 1 )
+        /**
+         * iterate over duplicates to populate results
+         * do only one pass, then call recursively.
+         */
+//        print("Processing \(files.count) files,"
+//              + "    files[0].bytesRead = \(files[0].bytesRead), "
+//              + "    files[0].size = \(files[0].size)")
+
+        var checksumMap : [String : [FileData] ] = [:]
+        /**
+         * Collect the checksums in a set whose size will equal the files.count when there are no duplicates.
+         */
+        files.forEach
+        { file in
+            file.md5()
+            if( checksumMap[file.checksum] == nil )
             {
-                print("Processing \(files.count) files of size \(fsize)")
-                var checksumMap : [String : [FileData] ] = [:]
-                // collect the checksums in a set whose size will equal the files.count when there are no duplicates
-                while(( checksumMap.count != files.count ) && (files[0].bytesRead < files[0].size))
-                {
-                    print( "files[0].bytesRead = \(files[0].bytesRead), files[0].size = \(files[0].size)" )
-                    // perform initial md5 on all files of this size and save to set.
-                    checksumMap.removeAll(keepingCapacity: true)
-                    files.forEach { file in
-                        file.md5()
-                        if( checksumMap[file.checksum] == nil )
-                        {
-                            checksumMap[file.checksum] = [file]
-                            print( "created checksumMap for checksum: \(file.checksum) for file: \(file.path)")
-                        }
-                        else
-                        {
-                            checksumMap[file.checksum]!.append( file )
-                            print( "adding to checksum: \(file.checksum)   file: \(file.path)")
-                        }
-                    }
-                }
-                // if there are duplicates we will have read the entire of these files. compare the size
-                if(files[0].bytesRead == files[0].size)
-                {
-                    print( "complete read of \(files[0].bytesRead)" )
-                    // iterate over the checksumMap to find the duplicates
-                    checksumMap.forEach { (csum: String, files: [FileData]) in
-                        print("files.count = \(files.count) for checksum \(csum)" )
-                        if( files.count > 1 )
-                        {
-                            let result : ResultData = ResultData( size: fsize, checksum: csum )
-                            var separator : String = ""
-                            files.forEach { fileData in
-                                result.files += separator + fileData.path.path(percentEncoded: false)
-                                separator = ", "
-                            }
-                            print( "result \(result.size), \(result.checksum), \(result.files)" )
-                            self.results.append( result )
-                        }
-                    }
-                }
+                checksumMap[file.checksum] = [file]
+                // print( "created checksumMap for checksum: \(file.checksum) for file: \(file.path)")
+            }
+            else
+            {
+                checksumMap[file.checksum]!.append( file )
+                // print( "adding to checksum: \(file.checksum)   file: \(file.path)")
             }
         }
+        /**
+         * For each checksum group, if there are more than one file, and if we have not read the entire file, recursively call compare.
+         */
+        checksumMap.forEach
+        { (csum: String, files: [FileData]) in
+            if( files.count > 1 )
+            {
+                /**
+                 * We can only determine that this is a duplicate if there are more than one with the same checksum that we have completely read.
+                 * Iterate through the checksumMap and test the bytesRead for the first of each set with more than one.
+                 */
+                if(files[0].bytesRead == files[0].size)
+                {
+                    print( "Complete read of \(files[0].bytesRead) for \(files[0].path.path(percentEncoded: false))" )
+                    print("files.count = \(files.count) for checksum \(csum)" )
+                    let result : ResultData = ResultData( size: files[0].size, checksum: csum )
+                    files.forEach
+                    { fileData in
+                        result.AddFile( file: fileData.path.path(percentEncoded: false) )
+                    }
+                    print( "Result \(result.size), \(result.checksum), \(result.files)" )
+                    self.results.append( result )
+                }
+                else
+                {
+                    // recursive call to compare with each group in the checksumMap
+                    print( "Recursive call with \(files.count) files.")
+                    self.compare(files: files )
+                }
+            }  // files.count > 1
+//            else
+//            {
+//                print( "file \(files[0].path.path(percentEncoded: false)) is unique.")
+//            }
+        } // for each checksumMap
+
     }
 
     func addFiles( pathURL : URL?, fm : FileManager )
@@ -185,7 +213,7 @@ struct ContentView: View {
                 if( self.duplicates[ fileData.size ] == nil )
                 {
                     self.duplicates[ fileData.size ] = [fileData]
-                    print( "Created new list for size: \(fileData.size) -> \(path)" )
+                    // print( "Created new list for size: \(fileData.size) -> \(path)" )
                 }
                 else
                 {

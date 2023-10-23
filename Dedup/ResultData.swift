@@ -12,29 +12,31 @@ class ResultData: Identifiable
     let id = UUID()
     var size: Int
     var checksum: String
-    var count: Int
-    var files: String
+    var fcount: Int
+    var files: [String]
 
     init( size : Int, checksum: String )
     {
         self.size = size
         self.checksum = checksum
-        self.count = 0
-        self.files = ""
+        self.fcount = 0
+        self.files = []
     }
 
     func AddFile( file: String )
     {
-        if( self.files.isEmpty )
-        {
-            self.files = file
-            self.count = 1
-        }
-        else
-        {
-            self.files = self.files + ", " + file
-            self.count += 1
-        }
+        self.files.append( file )
+        self.fcount += 1
     }
 
+    func getFiles() -> String
+    {
+        var allFiles : String = ""
+        var separator : String = ""
+        files.forEach { path in
+            allFiles += separator + path
+            separator = ", "
+        }
+        return allFiles
+    }
 }
