@@ -16,6 +16,12 @@ struct ContentView: View
     @State var files : [FileData] = []
     @State var duplicates : [ Int: [FileData] ] = [:]
     @State var results : [ResultData] = []
+    @State var okToRunAsync : Bool = false
+    @State var controlButtonLabel : String = "Start"
+    @State var controlButtonDisabled : Bool = true
+    @State private var progressLimit = 0.0
+    @State private var progressValue = 0.0
+    @State private var progressLabel : String = ""
 
     let exclusions : [String] = [
         ".ssh",
@@ -51,30 +57,31 @@ struct ContentView: View
                     if panel.runModal() == .OK
                     {
                         self.trgPath = panel.url
+                        //print( "path: \(self.trgPath!.path(percentEncoded: false))" )
+                        self.files.removeAll(keepingCapacity: true)
+                        self.duplicates.removeAll(keepingCapacity: true)
+                        // enable the control button
+                        self.controlButtonDisabled = false
                     }
-                    //print( "path: \(self.trgPath!.path(percentEncoded: false))" )
-                    self.files.removeAll(keepingCapacity: true)
-                    self.duplicates.removeAll(keepingCapacity: true)
                 }
                 Text(  verbatim: self.trgPath?.path(percentEncoded: false) ?? "nil" )
             }
             // Second Row:  Start button and scroll view.
             HStack
             {
-                Button("Start")
+                Button( self.controlButtonLabel )
                 {
                     print( "Start button pressed.  Path=\(String(describing: self.trgPath))" )
-                    self.files.removeAll(keepingCapacity: true)
-                    self.duplicates.removeAll(keepingCapacity: true)
-                    let fm = FileManager.default
-                    self.addFiles(pathURL: self.trgPath, fm: fm)
-                    print( "Done adding files.  comparing." )
-                    self.results.removeAll(keepingCapacity: true)
-                    duplicates.forEach { (fsize: Int, files: [FileData]) in
-                        self.compare( files: files )
+                    self.okToRunAsync = true
+                    self.controlButtonLabel = "Stop"
+                    Task
+                    {
+                        await self.findDuplicates()
                     }
-                    print( "Done" )
+//                    self.controlButtonLabel = "Start"
+//                    self.okToRunAsync = false
                 }
+                .disabled( self.controlButtonDisabled )
                 ScrollView
                 {
                     VStack(alignment: .leading)
@@ -112,8 +119,40 @@ struct ContentView: View
                     }
                 }
             }
+            // Last row: progress bar
+            ProgressView( self.progressLabel, value: self.progressValue, total: self.progressLimit )
         }
         .padding()
+    }
+
+    func findDuplicates() async
+    {
+        self.progressLabel = "Searching: "
+        self.progressValue = 0.0
+//        for number in 1...Int(self.progressLimit)
+//        {
+//            sleep( UInt32( 1 ) )
+//            self.progressValue = Double(number)
+//            self.progressLabel = String( number )
+//        }
+
+        self.files.removeAll(keepingCapacity: true)
+        self.duplicates.removeAll(keepingCapacity: true)
+        let fm = FileManager.default
+        self.addFiles(pathURL: self.trgPath, fm: fm)
+        self.progressLimit = Double(self.files.count)
+        self.progressLabel = "Comparing: "
+        print( "Done adding files.  comparing." )
+        self.results.removeAll(keepingCapacity: true)
+        duplicates.forEach { (fsize: Int, files: [FileData]) in
+            self.compare( files: files )
+            self.progressValue += Double(files.count)
+        }
+
+        self.controlButtonLabel = "Start"
+        self.okToRunAsync = false
+        self.progressLabel = "Done"
+        print( "Done" )
     }
 
     func compare( files: [FileData] )
