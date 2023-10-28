@@ -6,3 +6,19 @@
 //
 
 import Foundation
+
+
+class FolderDuplicateCountData: Identifiable
+{
+    let id = UUID()
+    var count: Int
+    var path: String
+
+
+    init( count : Int, path: String )
+    {
+        self.count = count
+        self.path = path
+    }
+
+}
