@@ -12,12 +12,14 @@ class FolderDuplicateCountData: Identifiable
 {
     let id = UUID()
     var count: Int
+    var size: Int64
     var path: String
 
 
-    init( count : Int, path: String )
+    init( count : Int, size: Int64, path: String )
     {
         self.count = count
+        self.size  = size
         self.path = path
     }
 

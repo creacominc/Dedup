@@ -91,6 +91,7 @@ struct ContentView: View
                         }
                     }
                 }
+                .defaultScrollAnchor(.bottom)
             }
             // Third row:  Results window
             ScrollView
@@ -109,6 +110,7 @@ struct ContentView: View
                     }
                 }
             }
+            .defaultScrollAnchor(.bottom)
             // Fourth row, folders by duplicate counts
             ScrollView
             {
@@ -116,10 +118,22 @@ struct ContentView: View
                 {
                     ForEach( self.folderDuplicateCounts )
                     { folderDuplicateCount in
-                        Text( "\(folderDuplicateCount.count) : \(folderDuplicateCount.path)" )
+                        HStack
+                        {
+                            Button( "\(folderDuplicateCount.size)" )
+                            {
+                                
+                            }
+                            Button( "\(folderDuplicateCount.count)" )
+                            {
+                                
+                            }
+                            Text( "\(folderDuplicateCount.path)" )
+                        }
                     }
                 }
             }
+            .defaultScrollAnchor(.top)
             // Last row: progress bar
             ProgressView( self.progressLabel, value: self.progressValue, total: self.progressLimit )
         }
@@ -129,7 +143,7 @@ struct ContentView: View
     func findDuplicates() async
     {
         // create a map for the folders to hold the counts
-        var foldersCountsMap : [ String : Int ] = [:]
+        var foldersCountsMap : [ String : (Int, Int64) ] = [:]
         self.progressLabel = "Searching: "
         self.progressValue = 0.0
 
@@ -153,15 +167,18 @@ struct ContentView: View
         self.progressLabel = "Done"
 
         // convert foldersCountsMap to folderDuplicateCounts
-        foldersCountsMap.forEach { (key: String, value: Int) in
-            self.folderDuplicateCounts.append(FolderDuplicateCountData(count: value, path: key))
+        foldersCountsMap.forEach { (key: String, value: (Int, Int64)) in
+            var count : Int
+            var size : Int64
+            (count, size) = value
+            self.folderDuplicateCounts.append(FolderDuplicateCountData(count: count, size: size, path: key))
         }
         // sort the folders by counts
-        self.folderDuplicateCounts.sort( by: { $0.count > $1.count } )
+        self.folderDuplicateCounts.sort( by: { $0.size > $1.size } )
         print( "Done" )
     }
 
-    func compare( files: [FileData], foldersCountsMap : inout [ String : Int ]  )
+    func compare( files: [FileData], foldersCountsMap : inout [ String : (Int, Int64) ]  )
     {
         /**
          * iterate over duplicates to populate results
@@ -208,14 +225,10 @@ struct ContentView: View
                         result.AddFile( file: fileData.path.path(percentEncoded: false) )
                         // Add to the paths map if this path is new
                         let container : String = fileData.path.deletingLastPathComponent().path(percentEncoded: false)
-                        if( foldersCountsMap.keys.contains( container ) )
-                        {
-                            foldersCountsMap[ container ]! += 1
-                        }
-                        else
-                        {
-                            foldersCountsMap[ container ] = 1
-                        }
+                        var count : Int = 0
+                        var size : Int64 = 0
+                        (count, size) = foldersCountsMap[ container ] ?? (0, 0)
+                        foldersCountsMap[ container ] = (count + 1, size + Int64(fileData.size))
                     }
                     print( "Result \(result.size), \(result.checksum), \(result.files)" )
                     self.results.append( result )
