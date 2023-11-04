@@ -15,7 +15,6 @@ class FolderDuplicateCountData: Identifiable
     var size: Int64
     var path: String
 
-
     init( count : Int, size: Int64, path: String )
     {
         self.count = count

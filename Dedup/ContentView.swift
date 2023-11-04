@@ -23,6 +23,7 @@ struct ContentView: View
     @State private var progressLimit = 0.0
     @State private var progressValue = 0.0
     @State private var progressLabel : String = ""
+    @State private var showDuplicateManagement : Bool = false
 
     let exclusions : [String] = [
         ".ssh",
@@ -116,21 +117,33 @@ struct ContentView: View
             {
                 VStack(alignment: .leading)
                 {
+
                     ForEach( self.folderDuplicateCounts )
-                    { folderDuplicateCount in
+                    {  folderDuplicateCountData in
                         HStack
                         {
-                            Button( "\(folderDuplicateCount.size)" )
+
+                            Button( "\(folderDuplicateCountData.size)" )
                             {
-                                
+                                self.showDuplicateManagement.toggle()
                             }
-                            Button( "\(folderDuplicateCount.count)" )
+                            .sheet(isPresented: self.$showDuplicateManagement) {
+                                DuplicateManagement( folderDuplicateCounts: folderDuplicateCountData, isPresented: $showDuplicateManagement )
+                            }
+
+                            Button( "\(folderDuplicateCountData.count)" )
                             {
-                                
+                                self.showDuplicateManagement.toggle()
                             }
-                            Text( "\(folderDuplicateCount.path)" )
+                            .sheet(isPresented: self.$showDuplicateManagement) {
+                                DuplicateManagement(  folderDuplicateCounts: folderDuplicateCountData, isPresented: $showDuplicateManagement )
+                            }
+
+                            Text( "\(folderDuplicateCountData.path)" )
+
                         }
                     }
+
                 }
             }
             .defaultScrollAnchor(.top)

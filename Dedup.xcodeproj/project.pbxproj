@@ -16,6 +16,7 @@
 		3643EF432ACCFE9F007D093D /* DedupUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3643EF422ACCFE9F007D093D /* DedupUITestsLaunchTests.swift */; };
 		3643EF502ACCFF92007D093D /* FileData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3643EF4F2ACCFF92007D093D /* FileData.swift */; };
 		367E669F2AECC161002338BC /* FolderDuplicateCountData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 367E669E2AECC161002338BC /* FolderDuplicateCountData.swift */; };
+		36D582632AED894A003B656F /* DuplicateManagement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36D582622AED894A003B656F /* DuplicateManagement.swift */; };
 		36EBFC5F2AE214F400D5445B /* ResultData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EBFC5E2AE214F400D5445B /* ResultData.swift */; };
 /* End PBXBuildFile section */
 
@@ -50,6 +51,7 @@
 		3643EF422ACCFE9F007D093D /* DedupUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DedupUITestsLaunchTests.swift; sourceTree = "<group>"; };
 		3643EF4F2ACCFF92007D093D /* FileData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileData.swift; sourceTree = "<group>"; };
 		367E669E2AECC161002338BC /* FolderDuplicateCountData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderDuplicateCountData.swift; sourceTree = "<group>"; };
+		36D582622AED894A003B656F /* DuplicateManagement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicateManagement.swift; sourceTree = "<group>"; };
 		36EBFC5E2AE214F400D5445B /* ResultData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultData.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -109,6 +111,7 @@
 				3643EF4F2ACCFF92007D093D /* FileData.swift */,
 				36EBFC5E2AE214F400D5445B /* ResultData.swift */,
 				367E669E2AECC161002338BC /* FolderDuplicateCountData.swift */,
+				36D582622AED894A003B656F /* DuplicateManagement.swift */,
 			);
 			path = Dedup;
 			sourceTree = "<group>";
@@ -272,6 +275,7 @@
 				3643EF272ACCFE9D007D093D /* ContentView.swift in Sources */,
 				3643EF252ACCFE9C007D093D /* DedupApp.swift in Sources */,
 				36EBFC5F2AE214F400D5445B /* ResultData.swift in Sources */,
+				36D582632AED894A003B656F /* DuplicateManagement.swift in Sources */,
 				3643EF502ACCFF92007D093D /* FileData.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
