@@ -9,7 +9,7 @@ import SwiftUI
 
 struct DuplicateManagement: View 
 {
-    var folderDuplicateCounts: FolderDuplicateCountData
+    @Binding var folderDuplicateCounts: FolderDuplicateCountData
     @Binding var isPresented: Bool
 
     var body: some View

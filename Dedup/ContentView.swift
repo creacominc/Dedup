@@ -15,6 +15,7 @@ struct ContentView: View
     @State var trgPath : URL?
     @State var files : [FileData] = []
     @State var folderDuplicateCounts : [ FolderDuplicateCountData ] = []
+    @State var folderDuplicateCountDataCurrent : FolderDuplicateCountData = FolderDuplicateCountData(count: 0, size: 0, path: "")
     @State var duplicates : [ Int: [FileData] ] = [:]
     @State var results : [ResultData] = []
     @State var okToRunAsync : Bool = false
@@ -62,6 +63,8 @@ struct ContentView: View
                         //print( "path: \(self.trgPath!.path(percentEncoded: false))" )
                         self.files.removeAll(keepingCapacity: true)
                         self.duplicates.removeAll(keepingCapacity: true)
+                        self.results.removeAll(keepingCapacity: true)
+                        self.folderDuplicateCounts.removeAll(keepingCapacity: true)
                         // enable the control button
                         self.controlButtonDisabled = false
                     }
@@ -79,6 +82,10 @@ struct ContentView: View
                     Task
                     {
                         await self.findDuplicates()
+                        if( !self.folderDuplicateCounts.isEmpty )
+                        {
+                            self.folderDuplicateCountDataCurrent = self.folderDuplicateCounts[0]
+                        }
                     }
                 }
                 .disabled( self.controlButtonDisabled )
@@ -125,23 +132,25 @@ struct ContentView: View
 
                             Button( "\(folderDuplicateCountData.size)" )
                             {
+                                print( "pressed size for path: \(folderDuplicateCountData.path)")
+                                self.folderDuplicateCountDataCurrent = folderDuplicateCountData
                                 self.showDuplicateManagement.toggle()
-                            }
-                            .sheet(isPresented: self.$showDuplicateManagement) {
-                                DuplicateManagement( folderDuplicateCounts: folderDuplicateCountData, isPresented: $showDuplicateManagement )
                             }
 
                             Button( "\(folderDuplicateCountData.count)" )
                             {
+                                print( "pressed count for path: \(folderDuplicateCountData.path)")
+                                self.folderDuplicateCountDataCurrent = folderDuplicateCountData
                                 self.showDuplicateManagement.toggle()
-                            }
-                            .sheet(isPresented: self.$showDuplicateManagement) {
-                                DuplicateManagement(  folderDuplicateCounts: folderDuplicateCountData, isPresented: $showDuplicateManagement )
                             }
 
                             Text( "\(folderDuplicateCountData.path)" )
 
                         }
+                    }
+                    .onAppear(perform: {  if( !self.folderDuplicateCounts.isEmpty ){ self.folderDuplicateCountDataCurrent = self.folderDuplicateCounts[0]; print(" ON APPEAR - first path: \(self.folderDuplicateCounts[0].path)"); } } )
+                    .sheet(isPresented: self.$showDuplicateManagement) {
+                        self.showModalDuplicateManagement()
                     }
 
                 }
@@ -151,6 +160,12 @@ struct ContentView: View
             ProgressView( self.progressLabel, value: self.progressValue, total: self.progressLimit )
         }
         .padding()
+    }
+
+    func showModalDuplicateManagement() -> DuplicateManagement
+    {
+        print( "size: \(self.folderDuplicateCountDataCurrent.size),  path: \(self.folderDuplicateCountDataCurrent.path)" )
+        return DuplicateManagement(  folderDuplicateCounts: self.$folderDuplicateCountDataCurrent, isPresented: $showDuplicateManagement )
     }
 
     func findDuplicates() async
@@ -168,6 +183,7 @@ struct ContentView: View
         self.progressLabel = "Comparing: "
         print( "Done adding files.  comparing." )
         self.results.removeAll(keepingCapacity: true)
+        self.folderDuplicateCounts.removeAll(keepingCapacity: true)
         // for each file size in the top-level map
         duplicates.forEach { (fsize: Int, files: [FileData]) in
             // compare all files of this size
@@ -230,8 +246,8 @@ struct ContentView: View
                  */
                 if(files[0].bytesRead == files[0].size)
                 {
-                    print( "Complete read of \(files[0].bytesRead) for \(files[0].path.path(percentEncoded: false))" )
-                    print("files.count = \(files.count) for checksum \(csum)" )
+//                    print( "Complete read of \(files[0].bytesRead) for \(files[0].path.path(percentEncoded: false))" )
+//                    print("files.count = \(files.count) for checksum \(csum)" )
                     let result : ResultData = ResultData( size: files[0].size, checksum: csum )
                     files.forEach
                     { fileData in
@@ -243,7 +259,7 @@ struct ContentView: View
                         (count, size) = foldersCountsMap[ container ] ?? (0, 0)
                         foldersCountsMap[ container ] = (count + 1, size + Int64(fileData.size))
                     }
-                    print( "Result \(result.size), \(result.checksum), \(result.files)" )
+//                    print( "Result \(result.size), \(result.checksum), \(result.files)" )
                     self.results.append( result )
                 }
                 else
