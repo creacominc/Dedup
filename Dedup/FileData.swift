@@ -79,6 +79,7 @@ class FileData: Identifiable
             _ = CC_MD5_Final(&digest, &self.context)
             self.checksum = ""
             self.bufferSize =  4194304  // read in 4M increments after initial read.
+
             digest.forEach({ (val) in
                 self.checksum.append( String(format: "%02hhx", val) )
             })

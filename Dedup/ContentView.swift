@@ -19,8 +19,9 @@ struct ContentView: View
     @State var duplicates : [ Int: [FileData] ] = [:]
     @State var results : [ResultData] = []
     @State var okToRunAsync : Bool = false
-    @State var controlButtonLabel : String = "Start"
-    @State var controlButtonDisabled : Bool = true
+//    @State var controlButtonLabel : String = "Start"
+    @State var startButtonDisabled : Bool = true
+    @State var stopButtonDisabled : Bool = true
     @State private var progressLimit = 0.0
     @State private var progressValue = 0.0
     @State private var progressLabel : String = ""
@@ -66,7 +67,8 @@ struct ContentView: View
                         self.results.removeAll(keepingCapacity: true)
                         self.folderDuplicateCounts.removeAll(keepingCapacity: true)
                         // enable the control button
-                        self.controlButtonDisabled = false
+                        self.startButtonDisabled = false
+                        self.stopButtonDisabled = true
                     }
                 }
                 Text(  verbatim: self.trgPath?.path(percentEncoded: false) ?? "nil" )
@@ -74,11 +76,12 @@ struct ContentView: View
             // Second Row:  Start button and scroll view.
             HStack
             {
-                Button( self.controlButtonLabel )
+                Button( "Start" )
                 {
                     print( "Start button pressed.  Path=\(String(describing: self.trgPath))" )
                     self.okToRunAsync = true
-                    self.controlButtonLabel = "Stop"
+                    self.startButtonDisabled = true
+                    self.stopButtonDisabled = false
                     Task
                     {
                         await self.findDuplicates()
@@ -88,7 +91,23 @@ struct ContentView: View
                         }
                     }
                 }
-                .disabled( self.controlButtonDisabled )
+                .disabled( self.startButtonDisabled )
+                Button( "Stop" )
+                {
+                    print( "Stop button pressed.  Path=\(String(describing: self.trgPath))" )
+                    self.okToRunAsync = false
+                    self.startButtonDisabled = false
+                    self.stopButtonDisabled = true
+//                    Task
+//                    {
+//                        await self.findDuplicates()
+//                        if( !self.folderDuplicateCounts.isEmpty )
+//                        {
+//                            self.folderDuplicateCountDataCurrent = self.folderDuplicateCounts[0]
+//                        }
+//                    }
+                }
+                .disabled( self.stopButtonDisabled )
                 ScrollView
                 {
                     VStack(alignment: .leading)
@@ -170,8 +189,8 @@ struct ContentView: View
 
     func findDuplicates() async
     {
-        // create a map for the folders to hold the counts
-        var foldersCountsMap : [ String : (Int, Int64) ] = [:]
+        // create a map for the folders to hold the counts as [ <path> : ( <count>, <size>, [<file>], [<matchingPath>] ) ]
+        var foldersCountsMap : [ String : (Int, Int64, [String], [String]) ] = [:]
         self.progressLabel = "Searching: "
         self.progressValue = 0.0
 
@@ -191,15 +210,17 @@ struct ContentView: View
             self.progressValue += Double(files.count)
         }
 
-        self.controlButtonLabel = "Start"
+//        self.controlButtonLabel = "Start"
         self.okToRunAsync = false
         self.progressLabel = "Done"
 
         // convert foldersCountsMap to folderDuplicateCounts
-        foldersCountsMap.forEach { (key: String, value: (Int, Int64)) in
+        foldersCountsMap.forEach { (key: String, value: (Int, Int64, [String], [String])) in
             var count : Int
             var size : Int64
-            (count, size) = value
+            var files : [String]
+            var paths : [String]
+            (count, size, files, paths) = value
             self.folderDuplicateCounts.append(FolderDuplicateCountData(count: count, size: size, path: key))
         }
         // sort the folders by counts
@@ -207,7 +228,7 @@ struct ContentView: View
         print( "Done" )
     }
 
-    func compare( files: [FileData], foldersCountsMap : inout [ String : (Int, Int64) ]  )
+    func compare( files: [FileData], foldersCountsMap : inout [ String : (Int, Int64, [String], [String]) ]  )
     {
         /**
          * iterate over duplicates to populate results
@@ -246,8 +267,8 @@ struct ContentView: View
                  */
                 if(files[0].bytesRead == files[0].size)
                 {
-//                    print( "Complete read of \(files[0].bytesRead) for \(files[0].path.path(percentEncoded: false))" )
-//                    print("files.count = \(files.count) for checksum \(csum)" )
+                    // print( "Complete read of \(files[0].bytesRead) for \(files[0].path.path(percentEncoded: false))" )
+                    // print("files.count = \(files.count) for checksum \(csum)" )
                     let result : ResultData = ResultData( size: files[0].size, checksum: csum )
                     files.forEach
                     { fileData in
@@ -256,10 +277,12 @@ struct ContentView: View
                         let container : String = fileData.path.deletingLastPathComponent().path(percentEncoded: false)
                         var count : Int = 0
                         var size : Int64 = 0
-                        (count, size) = foldersCountsMap[ container ] ?? (0, 0)
-                        foldersCountsMap[ container ] = (count + 1, size + Int64(fileData.size))
+                        var files : [String] = []
+                        var paths : [String] = []
+                        (count, size, files, paths) = foldersCountsMap[ container ] ?? (0, 0, [], [])
+                        foldersCountsMap[ container ] = (count + 1, size + Int64(fileData.size), files, paths)
                     }
-//                    print( "Result \(result.size), \(result.checksum), \(result.files)" )
+                    // print( "Result \(result.size), \(result.checksum), \(result.files)" )
                     self.results.append( result )
                 }
                 else
