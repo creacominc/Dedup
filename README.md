@@ -1,9 +1,14 @@
 # Dedup
 dedup swift project
 
+2024-02-25
+
+Adding unit test functionality from container.
+
+
 2023-10-29
 
-Next step:  There si now a mapping of folders which contain duplicates and the 
+Next step:  There is now a mapping of folders which contain duplicates and the 
 number of duplicates they contain.  We need a modal dialog to manage the duplicates.  
 The workflow will be as follows:  Having chosen folders; found files of the same sizes; 
 and found the duplicates by md5 checksums; starting with the folders with the largest 

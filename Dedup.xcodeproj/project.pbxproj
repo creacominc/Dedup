@@ -18,6 +18,8 @@
 		367E669F2AECC161002338BC /* FolderDuplicateCountData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 367E669E2AECC161002338BC /* FolderDuplicateCountData.swift */; };
 		36D582632AED894A003B656F /* DuplicateManagement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36D582622AED894A003B656F /* DuplicateManagement.swift */; };
 		36EBFC5F2AE214F400D5445B /* ResultData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EBFC5E2AE214F400D5445B /* ResultData.swift */; };
+		36F365BE2B8C06C20070C3BE /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 36F365BD2B8C06C20070C3BE /* README.md */; };
+		36F365C02B8C06C90070C3BE /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 36F365BF2B8C06C90070C3BE /* LICENSE */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,6 +55,8 @@
 		367E669E2AECC161002338BC /* FolderDuplicateCountData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderDuplicateCountData.swift; sourceTree = "<group>"; };
 		36D582622AED894A003B656F /* DuplicateManagement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicateManagement.swift; sourceTree = "<group>"; };
 		36EBFC5E2AE214F400D5445B /* ResultData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultData.swift; sourceTree = "<group>"; };
+		36F365BD2B8C06C20070C3BE /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		36F365BF2B8C06C90070C3BE /* LICENSE */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +87,8 @@
 		3643EF182ACCFE9C007D093D = {
 			isa = PBXGroup;
 			children = (
+				36F365BF2B8C06C90070C3BE /* LICENSE */,
+				36F365BD2B8C06C20070C3BE /* README.md */,
 				3643EF232ACCFE9C007D093D /* Dedup */,
 				3643EF352ACCFE9F007D093D /* DedupTests */,
 				3643EF3F2ACCFE9F007D093D /* DedupUITests */,
@@ -245,7 +251,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				36F365BE2B8C06C20070C3BE /* README.md in Resources */,
 				3643EF2D2ACCFE9F007D093D /* Preview Assets.xcassets in Resources */,
+				36F365C02B8C06C90070C3BE /* LICENSE in Resources */,
 				3643EF292ACCFE9E007D093D /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
