@@ -1,6 +1,11 @@
 # Dedup
 dedup swift project
 
+2024-02-25
+
+Adding unit test functionality from container.
+
+
 2023-10-29
 
 Next step:  There is now a mapping of folders which contain duplicates and the 
