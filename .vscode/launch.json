@@ -5,10 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "F5 Anything: My Custom Command",
+            "name": "Unit Tests",
             "type": "f5anything",
             "request": "launch",
-            "command": "swift ${file}",
+            "command": "swift test",
         }
     ]
 }
