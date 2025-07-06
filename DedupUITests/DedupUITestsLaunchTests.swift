@@ -21,30 +21,18 @@ final class DedupUITestsLaunchTests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        // Insert assertions here to verify that the app launches successfully
-        // and displays the expected UI elements
-        
         // Check that the main window appears
         let window = app.windows.firstMatch
         XCTAssertTrue(window.exists)
         
-        // Check that the app title is visible
-        let titleText = app.staticTexts["Dedup"]
-        XCTAssertTrue(titleText.exists)
+        // Check that the app title and subtitle are visible
+        XCTAssertTrue(app.staticTexts["Dedup"].exists)
+        XCTAssertTrue(app.staticTexts["Media File Deduplication Tool"].exists)
         
-        // Check that the subtitle is visible
-        let subtitleText = app.staticTexts["Media File Deduplication Tool"]
-        XCTAssertTrue(subtitleText.exists)
-        
-        // Verify the app is responsive by checking segmented control exists
-        let segmentedControl = app.segmentedControls.firstMatch
-        XCTAssertTrue(segmentedControl.exists)
-        
-        // Check that all expected tabs are present
-        let filesToMoveTab = app.segmentedControls.buttons["Files to Move"]
-        let duplicatesTab = app.segmentedControls.buttons["Duplicates"]
-        let settingsTab = app.segmentedControls.buttons["Settings"]
-        
+        // Check that all expected tabs are present using accessibility identifiers
+        let filesToMoveTab = app.buttons["tab-filesToMove"]
+        let duplicatesTab = app.buttons["tab-duplicates"]
+        let settingsTab = app.buttons["tab-settings"]
         XCTAssertTrue(filesToMoveTab.exists)
         XCTAssertTrue(duplicatesTab.exists)
         XCTAssertTrue(settingsTab.exists)

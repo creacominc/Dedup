@@ -17,18 +17,21 @@ struct ContentView: View {
                             Label("Files to Move", systemImage: "folder.badge.plus")
                         }
                         .tag(0)
+                        .accessibilityIdentifier("tab-filesToMove")
                     
                     DuplicatesView(fileProcessor: fileProcessor)
                         .tabItem {
                             Label("Duplicates", systemImage: "doc.on.doc")
                         }
                         .tag(1)
+                        .accessibilityIdentifier("tab-duplicates")
                     
                     SettingsView(fileProcessor: fileProcessor)
                         .tabItem {
                             Label("Settings", systemImage: "gear")
                         }
                         .tag(2)
+                        .accessibilityIdentifier("tab-settings")
                 }
             }
         }
@@ -104,6 +107,7 @@ struct FilesToMoveView: View {
                     }
                 }
                 .disabled(fileProcessor.filesToMove.isEmpty)
+                .accessibilityIdentifier("button-selectAll")
                 
                 Button("Move Selected") {
                     Task {
@@ -113,6 +117,7 @@ struct FilesToMoveView: View {
                     }
                 }
                 .disabled(selectedFiles.isEmpty)
+                .accessibilityIdentifier("button-moveSelected")
             }
             
             if fileProcessor.filesToMove.isEmpty {
@@ -123,6 +128,7 @@ struct FilesToMoveView: View {
                     
                     Text("No files to move")
                         .font(.headline)
+                        .accessibilityIdentifier("label-noFilesToMove")
                     
                     Text("Select source and target directories, then start processing to see files that can be moved.")
                         .font(.subheadline)
@@ -160,6 +166,7 @@ struct DuplicatesView: View {
                     }
                 }
                 .disabled(selectedDuplicates.isEmpty)
+                .accessibilityIdentifier("button-deleteSelected")
             }
             
             if fileProcessor.duplicateGroups.isEmpty {
@@ -170,6 +177,7 @@ struct DuplicatesView: View {
                     
                     Text("No duplicates found")
                         .font(.headline)
+                        .accessibilityIdentifier("label-noDuplicates")
                     
                     Text("Select source and target directories, then start processing to see duplicate files.")
                         .font(.subheadline)
@@ -210,6 +218,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Directory Selection")
                     .font(.headline)
+                    .accessibilityIdentifier("label-directorySelection")
                 
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -217,9 +226,10 @@ struct SettingsView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                         
-                        Text(fileProcessor.sourceFiles.count > 0 ? "\(fileProcessor.sourceFiles.count) files found" : "Not selected")
+                        Text(fileProcessor.sourceURL != nil ? "\(fileProcessor.sourceFiles.count) files found" : "Not selected")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .accessibilityIdentifier("label-sourceDirectoryStatus")
                     }
                     
                     Spacer()
@@ -229,6 +239,7 @@ struct SettingsView: View {
                             await fileProcessor.selectSourceDirectory()
                         }
                     }
+                    .accessibilityIdentifier("button-selectSource")
                 }
                 
                 HStack {
@@ -237,9 +248,10 @@ struct SettingsView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                         
-                        Text(fileProcessor.targetFiles.count > 0 ? "\(fileProcessor.targetFiles.count) files found" : "Not selected")
+                        Text(fileProcessor.targetURL != nil ? "\(fileProcessor.targetFiles.count) files found" : "Not selected")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .accessibilityIdentifier("label-targetDirectoryStatus")
                     }
                     
                     Spacer()
@@ -249,34 +261,42 @@ struct SettingsView: View {
                             await fileProcessor.selectTargetDirectory()
                         }
                     }
+                    .accessibilityIdentifier("button-selectTarget")
                 }
             }
             
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Processing")
-                    .font(.headline)
+            // Only show Processing section when processing has started or both directories are selected
+            if fileProcessor.isProcessing || (fileProcessor.sourceURL != nil && fileProcessor.targetURL != nil) {
+                Divider()
                 
-                Button("Start Processing") {
-                    Task {
-                        await fileProcessor.startProcessing()
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Processing")
+                        .font(.headline)
+                        .accessibilityIdentifier("label-processingHeader")
+                    
+                    Button("Start Processing") {
+                        Task {
+                            await fileProcessor.startProcessing()
+                        }
                     }
-                }
-                .disabled(fileProcessor.sourceFiles.isEmpty || fileProcessor.targetFiles.isEmpty || fileProcessor.isProcessing)
-                .buttonStyle(.borderedProminent)
-                
-                if fileProcessor.isProcessing {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Processing files...")
-                            .font(.subheadline)
-                        
-                        ProgressView(value: fileProcessor.progress)
-                            .progressViewStyle(LinearProgressViewStyle())
-                        
-                        Text(fileProcessor.currentOperation)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    .disabled(fileProcessor.sourceURL == nil || fileProcessor.targetURL == nil || fileProcessor.isProcessing)
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("button-startProcessing")
+                    
+                    if fileProcessor.isProcessing {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Processing files...")
+                                .font(.subheadline)
+                                .accessibilityIdentifier("label-processingStatus")
+                            
+                            ProgressView(value: fileProcessor.progress)
+                                .progressViewStyle(LinearProgressViewStyle())
+                            
+                            Text(fileProcessor.currentOperation)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .accessibilityIdentifier("label-processingOperation")
+                        }
                     }
                 }
             }

@@ -27,21 +27,17 @@ final class DedupUITests: XCTestCase {
         app.launch()
         
         // Verify the app launches successfully
-        XCTAssertTrue(app.exists)
-        
-        // Check that the main window is visible
-        let window = app.windows.firstMatch
-        XCTAssertTrue(window.exists)
+        XCTAssertTrue(app.windows.firstMatch.exists)
     }
     
     func testTabNavigation() throws {
         let app = XCUIApplication()
         app.launch()
         
-        // Test tab navigation
-        let filesToMoveTab = app.segmentedControls.buttons["Files to Move"]
-        let duplicatesTab = app.segmentedControls.buttons["Duplicates"]
-        let settingsTab = app.segmentedControls.buttons["Settings"]
+        // Use accessibility identifiers for tab navigation
+        let filesToMoveTab = app.buttons["tab-filesToMove"]
+        let duplicatesTab = app.buttons["tab-duplicates"]
+        let settingsTab = app.buttons["tab-settings"]
         
         XCTAssertTrue(filesToMoveTab.exists)
         XCTAssertTrue(duplicatesTab.exists)
@@ -63,61 +59,53 @@ final class DedupUITests: XCTestCase {
         app.launch()
         
         // Navigate to settings tab
-        let settingsTab = app.segmentedControls.buttons["Settings"]
+        let settingsTab = app.buttons["tab-settings"]
         settingsTab.tap()
         
-        // Check that directory selection buttons exist
-        let selectSourceButton = app.buttons["Select Source"]
-        let selectTargetButton = app.buttons["Select Target"]
-        let startProcessingButton = app.buttons["Start Processing"]
-        
-        XCTAssertTrue(selectSourceButton.exists)
-        XCTAssertTrue(selectTargetButton.exists)
-        XCTAssertTrue(startProcessingButton.exists)
-        
-        // Initially, start processing should be disabled
-        XCTAssertFalse(startProcessingButton.isEnabled)
+        // Verify settings view elements
+        XCTAssertTrue(app.staticTexts["label-directorySelection"].exists)
+        XCTAssertTrue(app.buttons["button-selectSource"].exists)
+        XCTAssertTrue(app.buttons["button-selectTarget"].exists)
     }
     
     func testEmptyStateViews() throws {
         let app = XCUIApplication()
         app.launch()
         
-        // Check Files to Move tab empty state
-        let filesToMoveTab = app.segmentedControls.buttons["Files to Move"]
+        // Test Files to Move tab
+        let filesToMoveTab = app.buttons["tab-filesToMove"]
         filesToMoveTab.tap()
         
-        // Should show empty state message
-        let noFilesText = app.staticTexts["No files to move"]
-        XCTAssertTrue(noFilesText.exists)
+        // Verify empty state
+        XCTAssertTrue(app.staticTexts["label-noFilesToMove"].exists)
         
-        // Check Duplicates tab empty state
-        let duplicatesTab = app.segmentedControls.buttons["Duplicates"]
+        // Test Duplicates tab
+        let duplicatesTab = app.buttons["tab-duplicates"]
         duplicatesTab.tap()
         
-        let noDuplicatesText = app.staticTexts["No duplicates found"]
-        XCTAssertTrue(noDuplicatesText.exists)
+        // Verify empty state
+        XCTAssertTrue(app.staticTexts["label-noDuplicates"].exists)
     }
     
     func testErrorHandling() throws {
         let app = XCUIApplication()
         app.launch()
         
-        // Navigate to settings and try to start processing without selecting directories
-        let settingsTab = app.segmentedControls.buttons["Settings"]
+        // Navigate to settings tab
+        let settingsTab = app.buttons["tab-settings"]
         settingsTab.tap()
         
-        let startProcessingButton = app.buttons["Start Processing"]
-        
-        // This should be disabled initially
+        // Try to start processing without selecting directories
+        let startProcessingButton = app.buttons["button-startProcessing"]
+        XCTAssertTrue(startProcessingButton.exists)
         XCTAssertFalse(startProcessingButton.isEnabled)
     }
-
-    @MainActor
+    
     func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+        if #available(macOS 10.15, *) {
+            measure(metrics: [XCTApplicationLaunchMetric()]) {
+                XCUIApplication().launch()
+            }
         }
     }
 } 

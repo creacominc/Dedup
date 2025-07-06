@@ -14,8 +14,8 @@ class FileProcessor: ObservableObject {
     @Published var currentOperation = ""
     @Published var errorMessage: String?
     
-    private var sourceURL: URL?
-    private var targetURL: URL?
+    var sourceURL: URL?
+    var targetURL: URL?
     private var checksumCache: [String: [FileInfo]] = [:]
     private let fileManager = FileManager.default
     
