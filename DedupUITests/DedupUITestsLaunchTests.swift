@@ -2,7 +2,7 @@
 //  DedupUITestsLaunchTests.swift
 //  DedupUITests
 //
-//  Created by Harold Tomlinson on 2023-10-03.
+//  Created by Harold Tomlinson on 2025-07-05.
 //
 
 import XCTest
@@ -17,6 +17,7 @@ final class DedupUITestsLaunchTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    @MainActor
     func testLaunch() throws {
         let app = XCUIApplication()
         app.launch()
