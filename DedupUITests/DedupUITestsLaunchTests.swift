@@ -29,12 +29,18 @@ final class DedupUITestsLaunchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Dedup"].exists)
         XCTAssertTrue(app.staticTexts["Media File Deduplication Tool"].exists)
         
-        // Check that all expected tabs are present using accessibility identifiers
-        let filesToMoveTab = app.buttons["tab-filesToMove"]
-        let duplicatesTab = app.buttons["tab-duplicates"]
-        let settingsTab = app.buttons["tab-settings"]
+        // Check that all expected tab buttons are present
+        let filesToMoveTab = app.buttons["tabButton-filesToMove"]
+        let duplicatesTab = app.buttons["tabButton-duplicates"]
+        let settingsTab = app.buttons["tabButton-settings"]
+        
         XCTAssertTrue(filesToMoveTab.exists)
         XCTAssertTrue(duplicatesTab.exists)
         XCTAssertTrue(settingsTab.exists)
+        
+        // Verify the app is responsive by checking that we can interact with tabs
+        XCTAssertTrue(filesToMoveTab.isEnabled)
+        XCTAssertTrue(duplicatesTab.isEnabled)
+        XCTAssertTrue(settingsTab.isEnabled)
     }
 } 

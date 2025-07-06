@@ -62,22 +62,37 @@ class FileProcessor: ObservableObject {
         isProcessing = false
     }
     
-    func moveSelectedFiles(_ files: [FileInfo]) async {
-        guard let targetURL = targetURL else { return }
+    func moveSelectedFiles(_ selectedFiles: [FileInfo]) async {
+        guard !selectedFiles.isEmpty else { return }
         
-        for file in files {
+        isProcessing = true
+        currentOperation = "Moving selected files..."
+        progress = 0.0
+        
+        let totalFiles = selectedFiles.count
+        var movedCount = 0
+        
+        for file in selectedFiles {
             do {
-                let destinationURL = try getDestinationURL(for: file, in: targetURL)
-                try await moveFile(file, to: destinationURL)
+                let targetPath = getTargetPath(for: file)
+                try await moveFile(file, to: targetPath)
+                movedCount += 1
+                progress = Double(movedCount) / Double(totalFiles)
+                currentOperation = "Moved \(movedCount) of \(totalFiles) files..."
             } catch {
-                errorMessage = "Failed to move \(file.displayName): \(error.localizedDescription)"
-                return
+                errorMessage = "Failed to move \(file.name): \(error.localizedDescription)"
+                break
             }
         }
         
-        // Refresh the lists after moving files
-        await scanSourceDirectory()
-        await scanTargetDirectory()
+        // Remove moved files from the filesToMove list
+        filesToMove.removeAll { file in
+            selectedFiles.contains { $0.id == file.id }
+        }
+        
+        isProcessing = false
+        currentOperation = ""
+        progress = 0.0
     }
     
     func deleteSelectedDuplicates(_ duplicates: [FileInfo]) async {
@@ -297,6 +312,18 @@ class FileProcessor: ObservableObject {
         try fileManager.createDirectory(at: destinationFolder, withIntermediateDirectories: true)
         
         return destinationFolder.appendingPathComponent(file.displayName)
+    }
+    
+    private func getTargetPath(for file: FileInfo) -> URL {
+        guard let targetURL = targetURL else {
+            fatalError("Target URL not set")
+        }
+        
+        do {
+            return try getDestinationURL(for: file, in: targetURL)
+        } catch {
+            fatalError("Failed to get target path: \(error)")
+        }
     }
     
     private func moveFile(_ file: FileInfo, to destinationURL: URL) async throws {

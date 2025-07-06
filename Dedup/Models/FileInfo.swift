@@ -116,11 +116,10 @@ struct FileInfo: Identifiable, Hashable, Codable {
     // MARK: - Duplicate Detection
     
     func isLikelyDuplicate(of other: FileInfo) -> Bool {
-        // Check if files have similar names (case insensitive)
-        let nameWithoutExtension = name.replacingOccurrences(of: ".\(fileExtension)", with: "")
-        let otherNameWithoutExtension = other.name.replacingOccurrences(of: ".\(other.fileExtension)", with: "")
-        
-        return nameWithoutExtension.lowercased() == otherNameWithoutExtension.lowercased()
+        // Use robust base name extraction
+        let baseName = url.deletingPathExtension().lastPathComponent
+        let otherBaseName = other.url.deletingPathExtension().lastPathComponent
+        return baseName.lowercased() == otherBaseName.lowercased()
     }
     
     func isDefinitelyDuplicate(of other: FileInfo) -> Bool {
@@ -157,7 +156,17 @@ struct FileInfo: Identifiable, Hashable, Codable {
     // MARK: - Quality Comparison
     
     func isHigherQuality(than other: FileInfo) -> Bool {
-        return mediaType.qualityScore > other.mediaType.qualityScore
+        // First compare media type quality scores
+        if mediaType.qualityScore != other.mediaType.qualityScore {
+            return mediaType.qualityScore > other.mediaType.qualityScore
+        }
+        
+        // If same media type, compare file extensions based on quality preferences
+        let myExtensionIndex = mediaType.qualityPreferences.firstIndex(of: fileExtension.lowercased()) ?? Int.max
+        let otherExtensionIndex = other.mediaType.qualityPreferences.firstIndex(of: other.fileExtension.lowercased()) ?? Int.max
+        
+        // Lower index means higher quality (preferred format)
+        return myExtensionIndex < otherExtensionIndex
     }
     
     // MARK: - Hashable
