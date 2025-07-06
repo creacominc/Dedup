@@ -15,7 +15,7 @@ A powerful macOS application for organizing and deduplicating media files from N
 ## Supported File Formats
 
 ### Photos
-- RAW: CR2 (Canon), RW2 (Panasonic)
+- RAW: CR2 (Canon), RW2 (Panasonic), DNG
 - Processed: TIFF, JPEG, PNG, PSD, BMP
 
 ### Videos
@@ -41,14 +41,26 @@ git clone <repository-url>
 cd Dedup
 ```
 
-2. Build the project:
+2. Open the project in Xcode:
 ```bash
-swift build -c release
+open Dedup.xcodeproj
 ```
 
-3. Run the application:
+3. Build and run:
+   - Press `Cmd+R` to build and run in Xcode
+   - Or use `Cmd+B` to build only
+
+### Command Line Building
+
 ```bash
-swift run -c release
+# Build the project
+xcodebuild -project Dedup.xcodeproj -scheme Dedup -configuration Release build
+
+# Run tests
+xcodebuild -project Dedup.xcodeproj -scheme Dedup -destination 'platform=macOS' test
+
+# Build for distribution
+xcodebuild -project Dedup.xcodeproj -scheme Dedup -configuration Release archive
 ```
 
 ## Usage
@@ -122,11 +134,20 @@ The application uses a multi-level approach to detect duplicates:
 
 ## Testing
 
-Run the test suite:
+### Running Tests
 
 ```bash
-swift test
+# Run all tests
+xcodebuild -project Dedup.xcodeproj -scheme Dedup -destination 'platform=macOS' test
+
+# Run specific test target
+xcodebuild -project Dedup.xcodeproj -scheme DedupTests -destination 'platform=macOS' test
+
+# Run UI tests
+xcodebuild -project Dedup.xcodeproj -scheme DedupUITests -destination 'platform=macOS' test
 ```
+
+### Test Coverage
 
 Tests cover:
 - Media type detection
@@ -136,22 +157,28 @@ Tests cover:
 - File moving operations
 - Quality preference logic
 - Performance benchmarks
+- UI interactions
+- App launch and navigation
 
 ## Development
 
 ### Project Structure
 
 ```
-Sources/Dedup/
+Dedup/
 ├── Models/
 │   └── FileInfo.swift          # Core data models
 ├── FileProcessor.swift         # Main processing logic
 ├── ContentView.swift          # Main UI
-├── DuplicateManagementView.swift # Duplicate management UI
-└── DedupApp.swift            # App entry point
+├── DedupApp.swift            # App entry point
+└── Info.plist                # App configuration
 
-Tests/DedupTests/
+DedupTests/
 └── DedupTests.swift          # Comprehensive test suite
+
+DedupUITests/
+├── DedupUITests.swift        # UI tests
+└── DedupUITestsLaunchTests.swift # Launch tests
 ```
 
 ### Adding New File Formats
@@ -161,6 +188,16 @@ To add support for new file formats:
 1. Update `MediaType.from(fileExtension:)` in `FileInfo.swift`
 2. Update quality preferences in `MediaType.qualityPreferences`
 3. Add corresponding tests in `DedupTests.swift`
+
+### Building for Distribution
+
+```bash
+# Create archive
+xcodebuild -project Dedup.xcodeproj -scheme Dedup -configuration Release archive -archivePath build/Dedup.xcarchive
+
+# Export for distribution
+xcodebuild -exportArchive -archivePath build/Dedup.xcarchive -exportPath build/Dedup -exportOptionsPlist exportOptions.plist
+```
 
 ## License
 
@@ -180,6 +217,16 @@ For issues and questions:
 - Check the existing issues
 - Create a new issue with detailed information
 - Include system specifications and error logs
+
+## Performance Notes
+
+This application is designed for high-performance systems with:
+- Large amounts of RAM (32GB+ recommended)
+- Fast network connections to NAS storage
+- Fast local storage for caching
+- Multiple CPU cores for parallel processing
+
+The application will automatically adapt to available system resources and provide progress feedback during long-running operations.
 
 2025-07-05 
 

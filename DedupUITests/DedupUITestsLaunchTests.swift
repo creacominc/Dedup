@@ -17,17 +17,36 @@ final class DedupUITestsLaunchTests: XCTestCase {
         continueAfterFailure = false
     }
 
-    @MainActor
     func testLaunch() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Insert steps here to perform after app launch but before taking a screenshot,
-        // such as logging into a test account or navigating somewhere in the app
-
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = "Launch Screen"
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        // Insert assertions here to verify that the app launches successfully
+        // and displays the expected UI elements
+        
+        // Check that the main window appears
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.exists)
+        
+        // Check that the app title is visible
+        let titleText = app.staticTexts["Dedup"]
+        XCTAssertTrue(titleText.exists)
+        
+        // Check that the subtitle is visible
+        let subtitleText = app.staticTexts["Media File Deduplication Tool"]
+        XCTAssertTrue(subtitleText.exists)
+        
+        // Verify the app is responsive by checking segmented control exists
+        let segmentedControl = app.segmentedControls.firstMatch
+        XCTAssertTrue(segmentedControl.exists)
+        
+        // Check that all expected tabs are present
+        let filesToMoveTab = app.segmentedControls.buttons["Files to Move"]
+        let duplicatesTab = app.segmentedControls.buttons["Duplicates"]
+        let settingsTab = app.segmentedControls.buttons["Settings"]
+        
+        XCTAssertTrue(filesToMoveTab.exists)
+        XCTAssertTrue(duplicatesTab.exists)
+        XCTAssertTrue(settingsTab.exists)
     }
-}
+} 
