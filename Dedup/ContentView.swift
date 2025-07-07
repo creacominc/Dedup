@@ -249,7 +249,7 @@ struct DuplicatesListView: View {
                     ForEach(Array(fileProcessor.duplicateGroups.enumerated()), id: \.offset) { index, group in
                         Section(header: Text("Group \(index + 1) (\(group.count) files)")) {
                             ForEach(group, id: \.id) { file in
-                                FileRowView(file: file)
+                                DuplicateFileRowView(file: file, group: group)
                                     .onTapGesture {
                                         selectedFile = file
                                     }
@@ -440,7 +440,8 @@ struct FileDetailView: View {
             NotificationCenter.default.removeObserver(self, name: .AVPlayerItemFailedToPlayToEndTime, object: playerItem)
         }
         
-        player = nil
+        // Don't set player to nil - this causes the controls to disappear
+        // The player will be replaced in setupPlayer for the next file
     }
 }
 
@@ -730,7 +731,8 @@ struct VideoView: View {
             NotificationCenter.default.removeObserver(self, name: .AVPlayerItemFailedToPlayToEndTime, object: playerItem)
         }
         
-        player = nil
+        // Don't set player to nil - this causes the controls to disappear
+        // The player will be replaced in setupPlayer for the next file
     }
     
     private func formatTime(_ time: Double) -> String {
@@ -747,6 +749,8 @@ struct AudioView: View {
     @Binding var currentTime: Double
     @Binding var duration: Double
     @Binding var timer: Timer?
+    @State private var isLoading = true
+    @State private var audioError: String?
     
     var body: some View {
         VStack(spacing: 0) {
@@ -780,8 +784,8 @@ struct AudioView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             
-            // Audio controls - only show if player exists
-            if player != nil {
+            // Audio controls - show if player exists and is not loading
+            if player != nil && !isLoading {
                 VStack(spacing: 12) {
                     // Progress slider
                     Slider(value: Binding(
@@ -825,11 +829,18 @@ struct AudioView: View {
                 .padding()
                 .background(Color(.controlBackgroundColor))
                 .cornerRadius(8)
+            } else if isLoading {
+                VStack(spacing: 12) {
+                    ProgressView("Loading audio...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         }
         .padding(.all, 10) // Reduced padding for more content space
+        .background(Color.green.opacity(0.1)) // Debug background
         .onAppear {
             print("DEBUG: AudioView appeared for file: \(file.displayName)")
+            resetState()
             setupPlayer()
         }
         .onDisappear {
@@ -838,28 +849,89 @@ struct AudioView: View {
         }
     }
     
+    private func resetState() {
+        print("DEBUG: AudioView - Resetting state for: \(file.displayName)")
+        isLoading = true
+        audioError = nil
+        currentTime = 0
+        duration = 0
+        isPlaying = false
+        // Don't reset the player here - let setupPlayer handle it
+    }
+    
     private func setupPlayer() {
         print("DEBUG: AudioView - Setting up player for: \(file.displayName)")
-        player = AVPlayer(url: file.url)
+        isLoading = true
         
-        // Get duration
-        let asset = AVURLAsset(url: file.url)
-        Task {
-            do {
-                let duration = try await asset.load(.duration)
-                await MainActor.run {
-                    self.duration = CMTimeGetSeconds(duration)
-                    print("DEBUG: AudioView - Audio loaded successfully: \(file.displayName), duration: \(self.duration)")
-                }
-            } catch {
-                print("DEBUG: AudioView - Error loading audio: \(error.localizedDescription)")
-            }
+        // Clean up timer only, don't reset player yet
+        timer?.invalidate()
+        timer = nil
+        
+        // Add safety check for URL
+        guard file.url.isFileURL else {
+            print("DEBUG: AudioView - Invalid file URL: \(file.url)")
+            audioError = "Invalid file URL"
+            isLoading = false
+            return
         }
         
-        // Setup timer for progress updates
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            if let player = player {
-                currentTime = CMTimeGetSeconds(player.currentTime())
+        // Check if file exists
+        guard FileManager.default.fileExists(atPath: file.url.path) else {
+            print("DEBUG: AudioView - File does not exist: \(file.url.path)")
+            audioError = "File does not exist"
+            isLoading = false
+            return
+        }
+        
+        // Create AVPlayer with error handling
+        DispatchQueue.main.async {
+            self.player = AVPlayer(url: file.url)
+            print("DEBUG: AudioView - Player created for: \(file.displayName), player: \(self.player != nil)")
+            
+            // Verify player was created successfully
+            guard self.player != nil else {
+                print("DEBUG: AudioView - Failed to create player")
+                self.audioError = "Failed to create audio player"
+                self.isLoading = false
+                return
+            }
+            
+            // Get duration
+            let asset = AVURLAsset(url: file.url)
+            Task {
+                do {
+                    let duration = try await asset.load(.duration)
+                    await MainActor.run {
+                        self.duration = CMTimeGetSeconds(duration)
+                        self.isLoading = false
+                        print("DEBUG: AudioView - Audio loaded successfully: \(file.displayName), duration: \(self.duration), player: \(self.player != nil)")
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.audioError = "Could not load audio duration: \(error.localizedDescription)"
+                        self.isLoading = false
+                        print("DEBUG: AudioView - Error loading audio: \(error.localizedDescription)")
+                    }
+                }
+            }
+            
+            // Set loading to false after a short delay to ensure player is ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if self.player != nil {
+                    self.isLoading = false
+                    print("DEBUG: AudioView - Player ready, setting loading to false")
+                } else {
+                    print("DEBUG: AudioView - Player not ready, showing error")
+                    self.audioError = "Failed to initialize audio player"
+                    self.isLoading = false
+                }
+            }
+            
+            // Setup timer for progress updates
+            self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                if let player = self.player {
+                    self.currentTime = CMTimeGetSeconds(player.currentTime())
+                }
             }
         }
     }
@@ -874,7 +946,8 @@ struct AudioView: View {
             NotificationCenter.default.removeObserver(self, name: .AVPlayerItemFailedToPlayToEndTime, object: playerItem)
         }
         
-        player = nil
+        // Don't set player to nil - this causes the controls to disappear
+        // The player will be replaced in setupPlayer for the next file
     }
     
     private func formatTime(_ time: Double) -> String {
@@ -941,6 +1014,12 @@ struct FileRowView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                 
+                Text(file.url.path)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                
                 HStack(spacing: 8) {
                     Text(file.mediaType.displayName)
                         .font(.caption)
@@ -956,6 +1035,129 @@ struct FileRowView: View {
                     Text(file.formattedCreationDate)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            // Show in Finder button
+            Button(action: {
+                NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+            }) {
+                Image(systemName: "folder")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Show in Finder")
+        }
+        .padding(.vertical, 4)
+    }
+    
+    private var iconName: String {
+        switch file.mediaType {
+        case .photo:
+            return "photo"
+        case .video:
+            return "video"
+        case .audio:
+            return "music.note"
+        case .unsupported:
+            return "exclamationmark.triangle"
+        }
+    }
+    
+    private var iconColor: Color {
+        switch file.mediaType {
+        case .photo:
+            return .blue
+        case .video:
+            return .red
+        case .audio:
+            return .green
+        case .unsupported:
+            return .orange
+        }
+    }
+    
+    private var mediaTypeColor: Color {
+        switch file.mediaType {
+        case .photo:
+            return .blue
+        case .video:
+            return .red
+        case .audio:
+            return .green
+        case .unsupported:
+            return .orange
+        }
+    }
+}
+
+struct DuplicateFileRowView: View {
+    let file: FileInfo
+    let group: [FileInfo]
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: iconName)
+                .font(.title2)
+                .foregroundColor(iconColor)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(file.displayName)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                Text(file.url.path)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                
+                HStack(spacing: 8) {
+                    Text(file.mediaType.displayName)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(mediaTypeColor.opacity(0.2))
+                        .cornerRadius(4)
+                    
+                    Text(file.formattedSize)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text(file.formattedCreationDate)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                // Show duplicate count and locations
+                if group.count > 1 {
+                    Text("Duplicate of \(group.count - 1) other file(s)")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .padding(.top, 2)
+                    
+                    // Show list of duplicate paths
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(group.filter { $0.id != file.id }, id: \.id) { duplicateFile in
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.right")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                
+                                Text(duplicateFile.url.path)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                        }
+                    }
+                    .padding(.top, 4)
+                    .padding(.leading, 8)
                 }
             }
             
@@ -1688,7 +1890,8 @@ struct BRAWVideoView: View {
             NotificationCenter.default.removeObserver(self, name: .AVPlayerItemFailedToPlayToEndTime, object: playerItem)
         }
         
-        player = nil
+        // Don't set player to nil - this causes the controls to disappear
+        // The player will be replaced in setupPlayer for the next file
     }
 }
 
