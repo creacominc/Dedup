@@ -36,6 +36,10 @@ struct FileInfo: Identifiable, Hashable, Codable {
         return formatter.string(from: creationDate)
     }
     
+    var isViewable: Bool {
+        return mediaType.isViewable
+    }
+    
     init(url: URL) throws {
         self.url = url
         self.name = url.lastPathComponent
@@ -186,11 +190,13 @@ enum MediaType: String, CaseIterable, Codable {
     case photo
     case video
     case audio
+    case unsupported
     
     static func from(fileExtension: String) -> MediaType {
-        let photoExtensions = ["cr2", "rw2", "raw", "tiff", "tif", "jpeg", "jpg", "png", "psd", "bmp", "dng"]
-        let videoExtensions = ["braw", "mov", "mp4", "avi", "mkv", "wmv", "flv", "webm"]
-        let audioExtensions = ["wav", "flac", "aac", "m4a", "mp3", "ogg"]
+        let photoExtensions = ["jpeg", "jpg", "png", "gif", "bmp", "tiff", "tif", "psd"]
+        let videoExtensions = ["mov", "mp4", "avi", "mkv", "wmv", "flv", "webm", "m4v", "braw"]
+        let audioExtensions = ["wav", "flac", "aac", "m4a", "mp3", "ogg", "wma"]
+        let unsupportedExtensions = ["cr2", "rw2", "raw", "dng", "arw", "nef", "orf", "rwz"]
         
         let ext = fileExtension.lowercased()
         
@@ -200,19 +206,23 @@ enum MediaType: String, CaseIterable, Codable {
             return .video
         } else if audioExtensions.contains(ext) {
             return .audio
+        } else if unsupportedExtensions.contains(ext) {
+            return .unsupported
         } else {
-            return .photo // Default to photo for unknown extensions
+            return .unsupported // Default to unsupported for unknown extensions
         }
     }
     
     var qualityPreferences: [String] {
         switch self {
         case .photo:
-            return ["cr2", "rw2", "raw", "dng", "tiff", "tif", "psd", "jpeg", "jpg", "png", "bmp"]
+            return ["jpeg", "jpg", "png", "tiff", "tif", "psd", "bmp"]
         case .video:
-            return ["braw", "dng", "mov", "mp4", "avi", "mkv", "wmv", "flv", "webm"]
+            return ["braw", "mov", "mp4", "avi", "mkv", "wmv", "flv", "webm"]
         case .audio:
             return ["wav", "flac", "aac", "m4a", "mp3", "ogg"]
+        case .unsupported:
+            return []
         }
     }
     
@@ -224,6 +234,8 @@ enum MediaType: String, CaseIterable, Codable {
             return 2
         case .audio:
             return 1
+        case .unsupported:
+            return 0
         }
     }
     
@@ -235,6 +247,21 @@ enum MediaType: String, CaseIterable, Codable {
             return "Videos"
         case .audio:
             return "Audio"
+        case .unsupported:
+            return "Unsupported"
+        }
+    }
+    
+    var isViewable: Bool {
+        switch self {
+        case .photo:
+            return true
+        case .video:
+            return true
+        case .audio:
+            return true
+        case .unsupported:
+            return false
         }
     }
 }

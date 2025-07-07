@@ -265,38 +265,55 @@ Once a difference in the checksums is found for a given file against every file 
 Please include unit tests and a way to verify the file moves.
 
 
-
-2024-02-25
-
-Adding unit test functionality from container.
-see: https://tech.pelmorex.com/2020/05/unit-testing-swift-code-on-linux/
-
-
-2023-10-29
-
-Next step:  There is now a mapping of folders which contain duplicates and the 
-number of duplicates they contain.  We need a modal dialog to manage the duplicates.  
-The workflow will be as follows:  Having chosen folders; found files of the same sizes; 
-and found the duplicates by md5 checksums; starting with the folders with the largest 
-space used in duplicate files, show the location of the two files.
-
-NOTE:  Need to add a test for symbolic or hard links and verify that we do not follow 
-them.  It may be useful to replace the duplicates with symlinks or hard links rather 
-than removing them.
-
-
-
-2023-10-01
-
-Done:  Increase efficiency by minimizing the amount we checksum.  
-Right now it wil read and sum the entire of files that are of the same size.
-Given that the many images from the BMPCC4k will be the same size, it would be 
-very slow to read all of it.
-
-Instead, create a recursive function that takes a set of files and creates new 
-sets of files with matching checksums.  
-
-Iterate through a set of files (initialy matched on size) and break that group
-into smaller groups with the same checksum (via dictionary).  Call again with 
-each group of two or more files.
-
+Summary of Crash Fix
+The crash was happening in the SwiftUI view rendering system, specifically with the _AVKit_SwiftUI framework when trying to create a VideoPlayer view. The crash was occurring during metadata initialization in the Swift runtime.
+Root Cause
+The crash was likely caused by:
+Premature player cleanup - The player was being set to nil during setup, causing the VideoPlayer to be created with an invalid player
+Threading issues - AVPlayer creation was happening on background threads instead of the main queue
+Missing safety checks - No validation of player state before creating VideoPlayer
+Memory management issues - Notification observers weren't being properly cleaned up
+Fixes Applied
+Added comprehensive safety checks:
+URL validation (file.url.isFileURL)
+File existence checks (FileManager.default.fileExists)
+Player creation validation
+Player item status checks (player.currentItem != nil and player.currentItem?.status != .failed)
+Improved threading:
+Moved AVPlayer creation to the main queue using DispatchQueue.main.async
+Added proper error handling for async operations
+Enhanced player management:
+Created AVPlayer with AVPlayerItem for better control
+Added notification observers for player item failures
+Improved cleanup methods to remove notification observers
+Better error handling:
+Added multiple fallback states for different error conditions
+Enhanced debug logging to track player states
+Added delays to ensure player initialization is complete
+Memory management:
+Added proper cleanup of notification observers
+Improved timer management
+Better state management to prevent memory leaks
+Key Changes Made
+VideoView and BRAWVideoView setupPlayer() methods:
+Added URL and file existence validation
+Moved player creation to main queue
+Added player item status monitoring
+Enhanced error handling and logging
+VideoPlayer creation safety:
+Added checks for player.currentItem != nil and player.currentItem?.status != .failed
+Only create VideoPlayer when player is fully initialized
+Cleanup improvements:
+Added notification observer cleanup
+Better timer management
+Proper player state reset
+Debug enhancements:
+Added comprehensive logging throughout the video setup process
+Better error messages for different failure scenarios
+The app should now be much more stable when handling video files, with proper error handling and no more crashes related to VideoPlayer initialization. The changes ensure that:
+VideoPlayer is only created with valid, fully initialized players
+All AVPlayer operations happen on the main queue
+Proper cleanup prevents memory leaks
+Comprehensive error handling provides fallback states
+Debug logging helps track any remaining issues
+You can now test the app and it should handle video files without crashing. The debug logging will help identify any remaining issues if they occur.
