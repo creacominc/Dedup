@@ -105,6 +105,15 @@ struct FileInfo: Identifiable, Hashable, Codable {
         return mediaType.isViewable
     }
     
+    var isBRAWFile: Bool {
+        return mediaType == .video && fileExtension.lowercased() == "braw"
+    }
+    
+    var isRAWFile: Bool {
+        let rawExtensions = ["cr2", "rw2", "raw", "dng", "arw", "nef", "orf", "rwz"]
+        return mediaType == .photo && rawExtensions.contains(fileExtension.lowercased())
+    }
+    
     init(url: URL) throws {
         self.url = url
         self.name = url.lastPathComponent
@@ -378,10 +387,9 @@ enum MediaType: String, CaseIterable, Codable {
     case unsupported
     
     static func from(fileExtension: String) -> MediaType {
-        let photoExtensions = ["jpeg", "jpg", "png", "gif", "bmp", "tiff", "tif", "psd"]
+        let photoExtensions = ["jpeg", "jpg", "png", "gif", "bmp", "tiff", "tif", "psd", "cr2", "rw2", "raw", "dng", "arw", "nef", "orf", "rwz"]
         let videoExtensions = ["mov", "mp4", "avi", "mkv", "wmv", "flv", "webm", "m4v", "braw"]
         let audioExtensions = ["wav", "flac", "aac", "m4a", "mp3", "ogg", "wma"]
-        let unsupportedExtensions = ["cr2", "rw2", "raw", "dng", "arw", "nef", "orf", "rwz"]
         
         let ext = fileExtension.lowercased()
         
@@ -391,8 +399,6 @@ enum MediaType: String, CaseIterable, Codable {
             return .video
         } else if audioExtensions.contains(ext) {
             return .audio
-        } else if unsupportedExtensions.contains(ext) {
-            return .unsupported
         } else {
             return .unsupported // Default to unsupported for unknown extensions
         }
@@ -401,7 +407,7 @@ enum MediaType: String, CaseIterable, Codable {
     var qualityPreferences: [String] {
         switch self {
         case .photo:
-            return ["jpeg", "jpg", "png", "tiff", "tif", "psd", "bmp"]
+            return ["cr2", "rw2", "raw", "dng", "arw", "nef", "orf", "rwz", "tiff", "tif", "psd", "jpeg", "jpg", "png", "bmp"]
         case .video:
             return ["braw", "mov", "mp4", "avi", "mkv", "wmv", "flv", "webm"]
         case .audio:

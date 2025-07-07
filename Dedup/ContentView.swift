@@ -361,8 +361,13 @@ struct FileDetailView: View {
                 } else {
                     switch file.mediaType {
                     case .photo:
-                        PhotoView(file: file)
-                            .id(file.id)
+                        if file.isRAWFile {
+                            RAWImageView(file: file)
+                                .id(file.id)
+                        } else {
+                            PhotoView(file: file)
+                                .id(file.id)
+                        }
                     case .video:
                         if file.fileExtension.lowercased() == "braw" {
                             BRAWVideoView(file: file, player: $player, isPlaying: $isPlaying, currentTime: $currentTime, duration: $duration, timer: $timer)
@@ -1111,6 +1116,268 @@ struct SettingsView: View {
     }
 }
 
+struct RAWImageView: View {
+    let file: FileInfo
+    @State private var image: NSImage?
+    @State private var error: String?
+    @State private var isLoading = true
+    @State private var rawMetadata: RAWMetadata?
+    @State private var showExternalViewerOption = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Image viewer or preview
+            if let image = image {
+                GeometryReader { geometry in
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(
+                            width: geometry.size.width > 0 && image.size.height > 0 ? min(geometry.size.width, geometry.size.height * image.size.width / image.size.height) : 100,
+                            height: geometry.size.height > 0 && image.size.width > 0 ? min(geometry.size.height, geometry.size.width * image.size.height / image.size.width) : 100
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.blue.opacity(0.1))
+                }
+            } else if let error = error {
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(Color(.controlBackgroundColor))
+                        .aspectRatio(contentMode: .fit)
+                        .overlay(
+                            VStack(spacing: 12) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.orange)
+                                Text("RAW Image Error")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                                Text(error)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                
+                                if showExternalViewerOption {
+                                    Button("Open with External Viewer") {
+                                        openWithExternalViewer()
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                                
+                                Button(action: {
+                                    NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+                                }) {
+                                    Label("Show in Finder", systemImage: "folder")
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        )
+                }
+                .onAppear {
+                    print("DEBUG: RAWImageView showing error - \(file.displayName), error: \(error)")
+                }
+            } else if isLoading {
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(Color(.controlBackgroundColor))
+                        .aspectRatio(contentMode: .fit)
+                        .overlay(
+                            VStack(spacing: 12) {
+                                ProgressView("Loading RAW image...")
+                                    .progressViewStyle(CircularProgressViewStyle())
+                                Text("RAW files may take longer to load")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                
+                                if let metadata = rawMetadata {
+                                    VStack(spacing: 4) {
+                                        Text("Resolution: \(metadata.resolution)")
+                                            .font(.caption)
+                                        Text("Color Depth: \(metadata.colorDepth)")
+                                            .font(.caption)
+                                        Text("Format: \(metadata.format)")
+                                            .font(.caption)
+                                    }
+                                    .padding(.top, 8)
+                                }
+                            }
+                        )
+                        .cornerRadius(8)
+                }
+                .onAppear {
+                    print("DEBUG: RAWImageView showing loading - \(file.displayName)")
+                }
+            } else {
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(Color(.controlBackgroundColor))
+                        .aspectRatio(contentMode: .fit)
+                        .overlay(
+                            VStack(spacing: 12) {
+                                Image(systemName: "photo")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.secondary)
+                                Text("RAW Image Preview")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                                
+                                if let metadata = rawMetadata {
+                                    VStack(spacing: 4) {
+                                        Text("Resolution: \(metadata.resolution)")
+                                            .font(.caption)
+                                        Text("Color Depth: \(metadata.colorDepth)")
+                                            .font(.caption)
+                                        Text("Format: \(metadata.format)")
+                                            .font(.caption)
+                                    }
+                                    .padding(.vertical, 8)
+                                }
+                                
+                                Button("Open with External Viewer") {
+                                    openWithExternalViewer()
+                                }
+                                .buttonStyle(.bordered)
+                                
+                                Button(action: {
+                                    NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+                                }) {
+                                    Label("Show in Finder", systemImage: "folder")
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        )
+                }
+                .onAppear {
+                    print("DEBUG: RAWImageView showing preview - \(file.displayName)")
+                }
+            }
+        }
+        .padding(.all, 10)
+        .background(Color.blue.opacity(0.1))
+        .onAppear {
+            print("DEBUG: RAWImageView appeared for file: \(file.displayName)")
+            resetState()
+            setupRAWImage()
+        }
+        .onDisappear {
+            print("DEBUG: RAWImageView disappeared for file: \(file.displayName)")
+        }
+    }
+    
+    private func resetState() {
+        print("DEBUG: RAWImageView - Resetting state for: \(file.displayName)")
+        isLoading = true
+        error = nil
+        image = nil
+        rawMetadata = nil
+        showExternalViewerOption = false
+    }
+    
+    private func setupRAWImage() {
+        print("DEBUG: RAWImageView - Setting up RAW image for: \(file.displayName)")
+        isLoading = true
+        
+        // Validate file
+        guard file.url.isFileURL else {
+            print("DEBUG: RAWImageView - Invalid file URL: \(file.url)")
+            error = "Invalid file URL"
+            isLoading = false
+            return
+        }
+        
+        guard FileManager.default.fileExists(atPath: file.url.path) else {
+            print("DEBUG: RAWImageView - File does not exist: \(file.url.path)")
+            error = "File does not exist"
+            isLoading = false
+            return
+        }
+        
+        // Extract RAW metadata first
+        Task {
+            await extractRAWMetadata()
+            
+            // Try multiple approaches for RAW image viewing
+            await MainActor.run {
+                setupRAWImageLoading()
+            }
+        }
+    }
+    
+    private func extractRAWMetadata() async {
+        print("DEBUG: RAWImageView - Extracting RAW metadata for: \(file.displayName)")
+        
+        // Use RAWSupport utility
+        if let metadata = await RAWSupport.shared.extractRAWMetadata(from: file.url) {
+            await MainActor.run {
+                self.rawMetadata = metadata
+            }
+        }
+    }
+    
+    private func setupRAWImageLoading() {
+        print("DEBUG: RAWImageView - Setting up RAW image loading for: \(file.displayName)")
+        
+        // Try multiple approaches for RAW image viewing
+        
+        // Approach 1: Try with NSImage (might work with some RAW files)
+        DispatchQueue.main.async {
+            if let loadedImage = NSImage(contentsOf: file.url) {
+                print("DEBUG: RAWImageView - NSImage loaded successfully: \(file.displayName)")
+                self.image = loadedImage
+                self.isLoading = false
+                return
+            }
+            
+            // Approach 2: Try FFmpeg conversion
+            if RAWSupport.shared.hasFFmpeg {
+                Task {
+                    await tryFFmpegConversion()
+                }
+                return
+            }
+            
+            // Approach 3: Check for available RAW viewers
+            if RAWSupport.shared.hasRAWViewingSupport {
+                self.showExternalViewerOption = true
+                self.isLoading = false
+                self.error = "RAW files require specialized software for viewing. Use the 'Open with External Viewer' button."
+                return
+            }
+            
+            // Final fallback
+            self.showExternalViewerOption = true
+            self.isLoading = false
+            self.error = "RAW files require specialized software. Install Capture One, Lightroom, or use Preview.app for viewing."
+        }
+    }
+    
+    private func tryFFmpegConversion() async {
+        print("DEBUG: RAWImageView - Attempting FFmpeg conversion")
+        
+        if let convertedURL = await RAWSupport.shared.convertRAWToJPEG(file.url) {
+            await MainActor.run {
+                if let convertedImage = NSImage(contentsOf: convertedURL) {
+                    self.image = convertedImage
+                    self.isLoading = false
+                    print("DEBUG: RAWImageView - FFmpeg conversion successful")
+                } else {
+                    self.error = "FFmpeg conversion failed to create viewable image"
+                    self.isLoading = false
+                }
+            }
+        } else {
+            await MainActor.run {
+                self.error = "FFmpeg conversion failed"
+                self.isLoading = false
+            }
+        }
+    }
+    
+    private func openWithExternalViewer() {
+        RAWSupport.shared.openRAWFile(file.url)
+    }
+}
+
 struct BRAWVideoView: View {
     let file: FileInfo
     @Binding var player: AVPlayer?
@@ -1120,21 +1387,23 @@ struct BRAWVideoView: View {
     @Binding var timer: Timer?
     @State private var videoError: String?
     @State private var isLoading = true
+    @State private var brawMetadata: BRAWMetadata?
+    @State private var showExternalPlayerOption = false
     
     var body: some View {
         VStack(spacing: 0) {
-            // Video player
+            // Video player or preview
             if let player = player, player.currentItem != nil, player.currentItem?.status != .failed {
                 GeometryReader { geometry in
                     VideoPlayer(player: player)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.red.opacity(0.3)) // Debug background restored
+                        .background(Color.red.opacity(0.3))
                         .onAppear {
-                            print("DEBUG: VideoPlayer frame - available: \(geometry.size.width) x \(geometry.size.height)")
-                            print("DEBUG: VideoPlayer appeared for: \(file.displayName)")
+                            print("DEBUG: BRAW VideoPlayer frame - available: \(geometry.size.width) x \(geometry.size.height)")
+                            print("DEBUG: BRAW VideoPlayer appeared for: \(file.displayName)")
                         }
                         .onDisappear {
-                            print("DEBUG: VideoPlayer disappeared for: \(file.displayName)")
+                            print("DEBUG: BRAW VideoPlayer disappeared for: \(file.displayName)")
                         }
                 }
             } else if let videoError = videoError {
@@ -1147,12 +1416,20 @@ struct BRAWVideoView: View {
                                 Image(systemName: "exclamationmark.triangle")
                                     .font(.system(size: 48))
                                     .foregroundColor(.orange)
-                                Text("BRAW Video Not Supported")
+                                Text("BRAW Video Error")
                                     .font(.headline)
                                     .foregroundColor(.secondary)
                                 Text(videoError)
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                
+                                if showExternalPlayerOption {
+                                    Button("Open with External Player") {
+                                        openWithExternalPlayer()
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
                                 
                                 Button(action: {
                                     NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
@@ -1178,6 +1455,18 @@ struct BRAWVideoView: View {
                                 Text("BRAW files may take longer to load")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
+                                
+                                if let metadata = brawMetadata {
+                                    VStack(spacing: 4) {
+                                        Text("Resolution: \(metadata.resolution)")
+                                            .font(.caption)
+                                        Text("Frame Rate: \(metadata.frameRate)")
+                                            .font(.caption)
+                                        Text("Codec: \(metadata.codec)")
+                                            .font(.caption)
+                                    }
+                                    .padding(.top, 8)
+                                }
                             }
                         )
                         .cornerRadius(8)
@@ -1195,13 +1484,26 @@ struct BRAWVideoView: View {
                                 Image(systemName: "video")
                                     .font(.system(size: 48))
                                     .foregroundColor(.secondary)
-                                Text("BRAW Video Not Available")
+                                Text("BRAW Video Preview")
                                     .font(.headline)
                                     .foregroundColor(.secondary)
-                                Text("BRAW files require specialized software like DaVinci Resolve or Blackmagic RAW Player.")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
+                                
+                                if let metadata = brawMetadata {
+                                    VStack(spacing: 4) {
+                                        Text("Resolution: \(metadata.resolution)")
+                                            .font(.caption)
+                                        Text("Frame Rate: \(metadata.frameRate)")
+                                            .font(.caption)
+                                        Text("Codec: \(metadata.codec)")
+                                            .font(.caption)
+                                    }
+                                    .padding(.vertical, 8)
+                                }
+                                
+                                Button("Open with External Player") {
+                                    openWithExternalPlayer()
+                                }
+                                .buttonStyle(.bordered)
                                 
                                 Button(action: {
                                     NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
@@ -1213,18 +1515,16 @@ struct BRAWVideoView: View {
                         )
                 }
                 .onAppear {
-                    print("DEBUG: BRAWVideoView showing 'not available' - \(file.displayName)")
-                    print("DEBUG: BRAWVideoView state - player: \(player != nil), isLoading: \(isLoading), videoError: \(videoError ?? "none")")
+                    print("DEBUG: BRAWVideoView showing preview - \(file.displayName)")
                 }
             }
         }
-        .padding(.all, 10) // Reduced padding for more video space
-        .background(Color.blue.opacity(0.1)) // Debug container background restored
+        .padding(.all, 10)
+        .background(Color.blue.opacity(0.1))
         .onAppear {
             print("DEBUG: BRAWVideoView appeared for file: \(file.displayName)")
-            print("DEBUG: BRAWVideoView blue background visible - \(file.displayName)")
             resetState()
-            setupPlayer()
+            setupBRAWPlayer()
         }
         .onDisappear {
             print("DEBUG: BRAWVideoView disappeared for file: \(file.displayName)")
@@ -1239,17 +1539,19 @@ struct BRAWVideoView: View {
         currentTime = 0
         duration = 0
         isPlaying = false
+        brawMetadata = nil
+        showExternalPlayerOption = false
     }
     
-    private func setupPlayer() {
-        print("DEBUG: BRAWVideoView - Setting up player for: \(file.displayName)")
+    private func setupBRAWPlayer() {
+        print("DEBUG: BRAWVideoView - Setting up BRAW player for: \(file.displayName)")
         isLoading = true
         
-        // Clean up timer only, don't reset player yet
+        // Clean up timer only
         timer?.invalidate()
         timer = nil
         
-        // Add safety check for URL
+        // Validate file
         guard file.url.isFileURL else {
             print("DEBUG: BRAWVideoView - Invalid file URL: \(file.url)")
             videoError = "Invalid file URL"
@@ -1257,7 +1559,6 @@ struct BRAWVideoView: View {
             return
         }
         
-        // Check if file exists
         guard FileManager.default.fileExists(atPath: file.url.path) else {
             print("DEBUG: BRAWVideoView - File does not exist: \(file.url.path)")
             videoError = "File does not exist"
@@ -1265,21 +1566,39 @@ struct BRAWVideoView: View {
             return
         }
         
-        // Try to create AVPlayer for video with error handling
-        // Create the player on the main queue to avoid threading issues
+        // Extract BRAW metadata first
+        Task {
+            await extractBRAWMetadata()
+            
+            // Try multiple approaches for BRAW playback
+            await MainActor.run {
+                setupBRAWPlayback()
+            }
+        }
+    }
+    
+    private func extractBRAWMetadata() async {
+        print("DEBUG: BRAWVideoView - Extracting BRAW metadata for: \(file.displayName)")
+        
+        // Use BRAWSupport utility
+        if let metadata = await BRAWSupport.shared.extractBRAWMetadata(from: file.url) {
+            await MainActor.run {
+                self.brawMetadata = metadata
+            }
+        }
+    }
+    
+
+    
+    private func setupBRAWPlayback() {
+        print("DEBUG: BRAWVideoView - Setting up BRAW playback for: \(file.displayName)")
+        
+        // Try multiple approaches for BRAW playback
+        
+        // Approach 1: Try with AVPlayer (might work with some BRAW files)
         DispatchQueue.main.async {
-            // Create AVPlayer with error handling
             let playerItem = AVPlayerItem(url: file.url)
             self.player = AVPlayer(playerItem: playerItem)
-            print("DEBUG: BRAWVideoView - Player created for: \(file.displayName), player: \(self.player != nil)")
-            
-            // Verify player was created successfully
-            guard self.player != nil else {
-                print("DEBUG: BRAWVideoView - Failed to create player")
-                self.videoError = "Failed to create video player"
-                self.isLoading = false
-                return
-            }
             
             // Add observer for player item status
             NotificationCenter.default.addObserver(
@@ -1287,49 +1606,76 @@ struct BRAWVideoView: View {
                 object: playerItem,
                 queue: .main
             ) { _ in
-                print("DEBUG: BRAWVideoView - Player item failed to play")
-                self.videoError = "Video failed to play"
-                self.isLoading = false
+                print("DEBUG: BRAWVideoView - AVPlayer failed, trying alternative methods")
+                self.tryAlternativeBRAWPlayback()
             }
             
-            // Get duration and set loading to false
-            let asset = AVURLAsset(url: file.url)
-            Task {
-                do {
-                    let duration = try await asset.load(.duration)
-                    await MainActor.run {
-                        self.duration = CMTimeGetSeconds(duration)
-                        self.isLoading = false
-                        print("DEBUG: BRAWVideoView - Video loaded successfully: \(file.displayName), duration: \(self.duration), player: \(self.player != nil)")
-                    }
-                } catch {
-                    await MainActor.run {
-                        self.videoError = "Could not load video duration: \(error.localizedDescription)"
-                        self.isLoading = false
-                        print("DEBUG: BRAWVideoView - Error loading video: \(error.localizedDescription)")
-                    }
-                }
-            }
-            
-            // Set loading to false after a short delay to ensure player is ready
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                if self.player != nil && self.player?.currentItem != nil {
-                    self.isLoading = false
-                    print("DEBUG: BRAWVideoView - Player ready, setting loading to false")
+            // Check if player is working
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                if self.player?.currentItem?.status == .failed {
+                    print("DEBUG: BRAWVideoView - AVPlayer failed, trying alternative methods")
+                    self.tryAlternativeBRAWPlayback()
                 } else {
-                    print("DEBUG: BRAWVideoView - Player not ready, showing error")
-                    self.videoError = "Failed to initialize video player"
                     self.isLoading = false
-                }
-            }
-            
-            // Setup timer for progress updates
-            self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                if let player = self.player {
-                    self.currentTime = CMTimeGetSeconds(player.currentTime())
+                    print("DEBUG: BRAWVideoView - AVPlayer working for BRAW file")
                 }
             }
         }
+    }
+    
+    private func tryAlternativeBRAWPlayback() {
+        print("DEBUG: BRAWVideoView - Trying alternative BRAW playback methods")
+        
+        // Check for available BRAW players
+        if BRAWSupport.shared.hasBlackmagicRAWPlayer {
+            showExternalPlayerOption = true
+            isLoading = false
+            videoError = "BRAW files require Blackmagic RAW Player or DaVinci Resolve for playback. Use the 'Open with External Player' button."
+            return
+        }
+        
+        if BRAWSupport.shared.hasDaVinciResolve {
+            showExternalPlayerOption = true
+            isLoading = false
+            videoError = "BRAW files require DaVinci Resolve for playback. Use the 'Open with External Player' button."
+            return
+        }
+        
+        // Try FFmpeg conversion (if available)
+        if BRAWSupport.shared.hasFFmpeg {
+            Task {
+                await tryFFmpegConversion()
+            }
+            return
+        }
+        
+        // Final fallback
+        showExternalPlayerOption = true
+        isLoading = false
+        videoError = "BRAW files require specialized software. Install Blackmagic RAW Player, DaVinci Resolve, or FFmpeg for playback."
+    }
+    
+    private func tryFFmpegConversion() async {
+        print("DEBUG: BRAWVideoView - Attempting FFmpeg conversion")
+        
+        if let convertedURL = await BRAWSupport.shared.convertBRAWToMP4(file.url) {
+            await MainActor.run {
+                // Create player with converted file
+                let playerItem = AVPlayerItem(url: convertedURL)
+                self.player = AVPlayer(playerItem: playerItem)
+                self.isLoading = false
+                print("DEBUG: BRAWVideoView - FFmpeg conversion successful")
+            }
+        } else {
+            await MainActor.run {
+                self.videoError = "FFmpeg conversion failed"
+                self.isLoading = false
+            }
+        }
+    }
+    
+    private func openWithExternalPlayer() {
+        BRAWSupport.shared.openBRAWFile(file.url)
     }
     
     private func cleanupPlayer() {
@@ -1344,14 +1690,582 @@ struct BRAWVideoView: View {
         
         player = nil
     }
-    
-    private func formatTime(_ time: Double) -> String {
-        let minutes = Int(time) / 60
-        let seconds = Int(time) % 60
-        return String(format: "%d:%02d", minutes, seconds)
-    }
+}
+
+// MARK: - BRAW Metadata Structure
+
+struct BRAWMetadata {
+    let resolution: String
+    let frameRate: String
+    let codec: String
+    let duration: String
 }
 
 #Preview {
     ContentView()
+}
+
+// MARK: - BRAW Support Utilities
+
+class BRAWSupport {
+    static let shared = BRAWSupport()
+    
+    private init() {}
+    
+    /// Check if the system has BRAW playback capabilities
+    var hasBRAWPlaybackSupport: Bool {
+        return hasBlackmagicRAWPlayer || hasDaVinciResolve || hasFFmpeg
+    }
+    
+    /// Check if Blackmagic RAW Player is installed
+    var hasBlackmagicRAWPlayer: Bool {
+        let possiblePaths = [
+            "/Applications/Blackmagic RAW Player.app",
+            "/Applications/Blackmagic RAW Player/Blackmagic RAW Player.app"
+        ]
+        
+        return possiblePaths.contains { FileManager.default.fileExists(atPath: $0) }
+    }
+    
+    /// Check if DaVinci Resolve is installed
+    var hasDaVinciResolve: Bool {
+        let possiblePaths = [
+            "/Applications/DaVinci Resolve/DaVinci Resolve.app",
+            "/Applications/DaVinci Resolve.app"
+        ]
+        
+        return possiblePaths.contains { FileManager.default.fileExists(atPath: $0) }
+    }
+    
+    /// Check if FFmpeg is available
+    var hasFFmpeg: Bool {
+        let ffmpegPaths = [
+            "/usr/local/bin/ffmpeg",
+            "/opt/homebrew/bin/ffmpeg"
+        ]
+        
+        return ffmpegPaths.contains { FileManager.default.fileExists(atPath: $0) }
+    }
+    
+    /// Get the best available BRAW player
+    var bestBRAWPlayer: String? {
+        if hasBlackmagicRAWPlayer {
+            return "Blackmagic RAW Player"
+        } else if hasDaVinciResolve {
+            return "DaVinci Resolve"
+        } else if hasFFmpeg {
+            return "FFmpeg"
+        }
+        return nil
+    }
+    
+    /// Extract BRAW metadata using available tools
+    func extractBRAWMetadata(from url: URL) async -> BRAWMetadata? {
+        // Try FFmpeg first
+        if hasFFmpeg {
+            return await extractMetadataWithFFmpeg(url)
+        }
+        
+        // Fallback to basic file info
+        return BRAWMetadata(
+            resolution: "Unknown",
+            frameRate: "Unknown",
+            codec: "BRAW",
+            duration: "Unknown"
+        )
+    }
+    
+    private func extractMetadataWithFFmpeg(_ url: URL) async -> BRAWMetadata? {
+        let ffmpegPath = "/usr/local/bin/ffmpeg"
+        let systemFFmpegPath = "/opt/homebrew/bin/ffmpeg"
+        
+        let ffmpeg = FileManager.default.fileExists(atPath: ffmpegPath) ? ffmpegPath :
+                     FileManager.default.fileExists(atPath: systemFFmpegPath) ? systemFFmpegPath : nil
+        
+        guard let ffmpegExecutable = ffmpeg else {
+            return nil
+        }
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ffmpegExecutable)
+        process.arguments = [
+            "-i", url.path,
+            "-f", "null",
+            "-"
+        ]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8) ?? ""
+            
+            return parseBRAWMetadataFromFFmpeg(output)
+        } catch {
+            print("DEBUG: BRAWSupport - FFmpeg error: \(error)")
+            return nil
+        }
+    }
+    
+    private func parseBRAWMetadataFromFFmpeg(_ output: String) -> BRAWMetadata? {
+        let lines = output.components(separatedBy: .newlines)
+        
+        var resolution = "Unknown"
+        var frameRate = "Unknown"
+        var codec = "BRAW"
+        var duration = "Unknown"
+        
+        for line in lines {
+            if line.contains("Video:") {
+                // Extract resolution
+                if let resolutionMatch = line.range(of: #"(\d{2,4}x\d{2,4})"#, options: .regularExpression) {
+                    resolution = String(line[resolutionMatch])
+                }
+                
+                // Extract frame rate
+                if let frameRateMatch = line.range(of: #"(\d+(?:\.\d+)?)\s*fps"#, options: .regularExpression) {
+                    let frameRateString = String(line[frameRateMatch])
+                    if let fps = frameRateString.components(separatedBy: " ").first {
+                        frameRate = "\(fps) fps"
+                    }
+                }
+                
+                // Extract codec
+                if let codecMatch = line.range(of: #"Video:\s+([^,\s]+)"#, options: .regularExpression) {
+                    let codecString = String(line[codecMatch])
+                    if let codecName = codecString.components(separatedBy: ":").last?.trimmingCharacters(in: .whitespaces) {
+                        codec = codecName
+                    }
+                }
+            }
+            
+            // Extract duration
+            if line.contains("Duration:") {
+                if let durationMatch = line.range(of: #"Duration:\s+(\d{2}:\d{2}:\d{2}\.\d{2})"#, options: .regularExpression) {
+                    let durationString = String(line[durationMatch])
+                    if let time = durationString.components(separatedBy: ":").last {
+                        duration = time
+                    }
+                }
+            }
+        }
+        
+        return BRAWMetadata(
+            resolution: resolution,
+            frameRate: frameRate,
+            codec: codec,
+            duration: duration
+        )
+    }
+    
+    /// Convert BRAW file to MP4 using FFmpeg
+    func convertBRAWToMP4(_ inputURL: URL) async -> URL? {
+        guard hasFFmpeg else { return nil }
+        
+        let ffmpegPath = "/usr/local/bin/ffmpeg"
+        let systemFFmpegPath = "/opt/homebrew/bin/ffmpeg"
+        
+        let ffmpeg = FileManager.default.fileExists(atPath: ffmpegPath) ? ffmpegPath :
+                     FileManager.default.fileExists(atPath: systemFFmpegPath) ? systemFFmpegPath : nil
+        
+        guard let ffmpegExecutable = ffmpeg else {
+            return nil
+        }
+        
+        // Create temporary output file
+        let tempDir = FileManager.default.temporaryDirectory
+        let outputURL = tempDir.appendingPathComponent("\(UUID().uuidString).mp4")
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ffmpegExecutable)
+        process.arguments = [
+            "-i", inputURL.path,
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-y", // Overwrite output file
+            outputURL.path
+        ]
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            if process.terminationStatus == 0 && FileManager.default.fileExists(atPath: outputURL.path) {
+                return outputURL
+            }
+        } catch {
+            print("DEBUG: BRAWSupport - FFmpeg conversion error: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Open BRAW file with the best available player
+    func openBRAWFile(_ url: URL) {
+        // Try Blackmagic RAW Player first
+        if hasBlackmagicRAWPlayer {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.arguments = [
+                "-a", "Blackmagic RAW Player",
+                url.path
+            ]
+            
+            do {
+                try process.run()
+                return
+            } catch {
+                print("DEBUG: BRAWSupport - Failed to open with Blackmagic RAW Player: \(error)")
+            }
+        }
+        
+        // Try DaVinci Resolve
+        if hasDaVinciResolve {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.arguments = [
+                "-a", "DaVinci Resolve",
+                url.path
+            ]
+            
+            do {
+                try process.run()
+                return
+            } catch {
+                print("DEBUG: BRAWSupport - Failed to open with DaVinci Resolve: \(error)")
+            }
+        }
+        
+        // Fallback to default application
+        NSWorkspace.shared.open(url)
+    }
+}
+
+// MARK: - RAW Image Support Utilities
+
+class RAWSupport {
+    static let shared = RAWSupport()
+    
+    private init() {}
+    
+    /// Check if the system has RAW image viewing capabilities
+    var hasRAWViewingSupport: Bool {
+        return hasPreview || hasPhotos || hasLightroom || hasCaptureOne || hasFFmpeg
+    }
+    
+    /// Check if Preview.app can handle RAW files
+    var hasPreview: Bool {
+        return true // Preview.app is always available on macOS
+    }
+    
+    /// Check if Photos.app is installed
+    var hasPhotos: Bool {
+        return FileManager.default.fileExists(atPath: "/Applications/Photos.app")
+    }
+    
+    /// Check if Adobe Lightroom is installed
+    var hasLightroom: Bool {
+        let possiblePaths = [
+            "/Applications/Adobe Lightroom/Adobe Lightroom.app",
+            "/Applications/Adobe Lightroom Classic/Adobe Lightroom Classic.app"
+        ]
+        
+        return possiblePaths.contains { FileManager.default.fileExists(atPath: $0) }
+    }
+    
+    /// Check if Capture One is installed
+    var hasCaptureOne: Bool {
+        let possiblePaths = [
+            "/Applications/Capture One/Capture One.app",
+            "/Applications/Capture One 23/Capture One 23.app",
+            "/Applications/Capture One 24/Capture One 24.app"
+        ]
+        
+        return possiblePaths.contains { FileManager.default.fileExists(atPath: $0) }
+    }
+    
+    /// Check if FFmpeg is available
+    var hasFFmpeg: Bool {
+        let ffmpegPaths = [
+            "/usr/local/bin/ffmpeg",
+            "/opt/homebrew/bin/ffmpeg"
+        ]
+        
+        return ffmpegPaths.contains { FileManager.default.fileExists(atPath: $0) }
+    }
+    
+    /// Get the best available RAW viewer
+    var bestRAWViewer: String? {
+        if hasCaptureOne {
+            return "Capture One"
+        } else if hasLightroom {
+            return "Adobe Lightroom"
+        } else if hasPhotos {
+            return "Photos"
+        } else if hasPreview {
+            return "Preview"
+        } else if hasFFmpeg {
+            return "FFmpeg"
+        }
+        return nil
+    }
+    
+    /// Extract RAW metadata using available tools
+    func extractRAWMetadata(from url: URL) async -> RAWMetadata? {
+        // Try FFmpeg first for detailed metadata
+        if hasFFmpeg {
+            return await extractMetadataWithFFmpeg(url)
+        }
+        
+        // Try using Core Graphics for basic metadata
+        return await extractMetadataWithCoreGraphics(url)
+    }
+    
+    private func extractMetadataWithFFmpeg(_ url: URL) async -> RAWMetadata? {
+        let ffmpegPath = "/usr/local/bin/ffmpeg"
+        let systemFFmpegPath = "/opt/homebrew/bin/ffmpeg"
+        
+        let ffmpeg = FileManager.default.fileExists(atPath: ffmpegPath) ? ffmpegPath :
+                     FileManager.default.fileExists(atPath: systemFFmpegPath) ? systemFFmpegPath : nil
+        
+        guard let ffmpegExecutable = ffmpeg else {
+            return nil
+        }
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ffmpegExecutable)
+        process.arguments = [
+            "-i", url.path,
+            "-f", "null",
+            "-"
+        ]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8) ?? ""
+            
+            return parseRAWMetadataFromFFmpeg(output)
+        } catch {
+            print("DEBUG: RAWSupport - FFmpeg error: \(error)")
+            return nil
+        }
+    }
+    
+    private func extractMetadataWithCoreGraphics(_ url: URL) async -> RAWMetadata? {
+        guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return nil
+        }
+        
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] else {
+            return nil
+        }
+        
+        var resolution = "Unknown"
+        var colorDepth = "Unknown"
+        var colorSpace = "Unknown"
+        var format = "RAW"
+        
+        // Get dimensions
+        if let width = properties[kCGImagePropertyPixelWidth as String] as? Int,
+           let height = properties[kCGImagePropertyPixelHeight as String] as? Int {
+            resolution = "\(width) x \(height)"
+        }
+        
+        // Get color depth
+        if let depth = properties[kCGImagePropertyDepth as String] as? Int {
+            colorDepth = "\(depth) bit"
+        }
+        
+        // Get color space
+        if let colorModel = properties[kCGImagePropertyColorModel as String] as? String {
+            colorSpace = colorModel
+        }
+        
+        // Get format
+        if let formatDescription = properties[kCGImagePropertyTIFFCompression as String] as? Int {
+            format = "RAW (Compression \(formatDescription))"
+        }
+        
+        return RAWMetadata(
+            resolution: resolution,
+            colorDepth: colorDepth,
+            colorSpace: colorSpace,
+            format: format
+        )
+    }
+    
+    private func parseRAWMetadataFromFFmpeg(_ output: String) -> RAWMetadata? {
+        let lines = output.components(separatedBy: .newlines)
+        
+        var resolution = "Unknown"
+        var colorDepth = "Unknown"
+        var colorSpace = "Unknown"
+        var format = "RAW"
+        
+        for line in lines {
+            if line.contains("Video:") {
+                // Extract resolution
+                if let resolutionMatch = line.range(of: #"(\d{2,4}x\d{2,4})"#, options: .regularExpression) {
+                    resolution = String(line[resolutionMatch])
+                }
+                
+                // Extract format
+                if let formatMatch = line.range(of: #"Video:\s+([^,\s]+)"#, options: .regularExpression) {
+                    let formatString = String(line[formatMatch])
+                    if let formatName = formatString.components(separatedBy: ":").last?.trimmingCharacters(in: .whitespaces) {
+                        format = formatName
+                    }
+                }
+            }
+            
+            // Extract color information
+            if line.contains("Color") {
+                if let colorMatch = line.range(of: #"([^,\s]+)"#, options: .regularExpression) {
+                    colorSpace = String(line[colorMatch])
+                }
+            }
+        }
+        
+        return RAWMetadata(
+            resolution: resolution,
+            colorDepth: colorDepth,
+            colorSpace: colorSpace,
+            format: format
+        )
+    }
+    
+    /// Convert RAW file to JPEG using FFmpeg
+    func convertRAWToJPEG(_ inputURL: URL) async -> URL? {
+        guard hasFFmpeg else { return nil }
+        
+        let ffmpegPath = "/usr/local/bin/ffmpeg"
+        let systemFFmpegPath = "/opt/homebrew/bin/ffmpeg"
+        
+        let ffmpeg = FileManager.default.fileExists(atPath: ffmpegPath) ? ffmpegPath :
+                     FileManager.default.fileExists(atPath: systemFFmpegPath) ? systemFFmpegPath : nil
+        
+        guard let ffmpegExecutable = ffmpeg else {
+            return nil
+        }
+        
+        // Create temporary output file
+        let tempDir = FileManager.default.temporaryDirectory
+        let outputURL = tempDir.appendingPathComponent("\(UUID().uuidString).jpg")
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ffmpegExecutable)
+        process.arguments = [
+            "-i", inputURL.path,
+            "-q:v", "2", // High quality
+            "-y", // Overwrite output file
+            outputURL.path
+        ]
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            if process.terminationStatus == 0 && FileManager.default.fileExists(atPath: outputURL.path) {
+                return outputURL
+            }
+        } catch {
+            print("DEBUG: RAWSupport - FFmpeg conversion error: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Open RAW file with the best available viewer
+    func openRAWFile(_ url: URL) {
+        // Try Capture One first (professional RAW editor)
+        if hasCaptureOne {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.arguments = [
+                "-a", "Capture One",
+                url.path
+            ]
+            
+            do {
+                try process.run()
+                return
+            } catch {
+                print("DEBUG: RAWSupport - Failed to open with Capture One: \(error)")
+            }
+        }
+        
+        // Try Adobe Lightroom
+        if hasLightroom {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.arguments = [
+                "-a", "Adobe Lightroom",
+                url.path
+            ]
+            
+            do {
+                try process.run()
+                return
+            } catch {
+                print("DEBUG: RAWSupport - Failed to open with Lightroom: \(error)")
+            }
+        }
+        
+        // Try Photos.app
+        if hasPhotos {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.arguments = [
+                "-a", "Photos",
+                url.path
+            ]
+            
+            do {
+                try process.run()
+                return
+            } catch {
+                print("DEBUG: RAWSupport - Failed to open with Photos: \(error)")
+            }
+        }
+        
+        // Fallback to Preview.app
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = [
+            "-a", "Preview",
+            url.path
+        ]
+        
+        do {
+            try process.run()
+        } catch {
+            print("DEBUG: RAWSupport - Failed to open with Preview: \(error)")
+            // Final fallback to default application
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+// MARK: - RAW Metadata Structure
+
+struct RAWMetadata {
+    let resolution: String
+    let colorDepth: String
+    let colorSpace: String
+    let format: String
 } 

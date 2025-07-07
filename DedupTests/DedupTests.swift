@@ -148,6 +148,59 @@ final class DedupTests: XCTestCase {
         }
     }
     
+    func testBRAWFileSupport() {
+        // Test BRAW file detection
+        let brawURL = URL(fileURLWithPath: "/test/video.braw")
+        let fileInfo = try! FileInfo(url: brawURL)
+        
+        XCTAssertEqual(fileInfo.mediaType, .video)
+        XCTAssertTrue(fileInfo.isBRAWFile)
+        XCTAssertTrue(fileInfo.isViewable)
+        
+        // Test BRAW support utilities
+        let brawSupport = BRAWSupport.shared
+        
+        // These should be false in test environment, but we can test the structure
+        XCTAssertFalse(brawSupport.hasBlackmagicRAWPlayer)
+        XCTAssertFalse(brawSupport.hasDaVinciResolve)
+        XCTAssertFalse(brawSupport.hasFFmpeg)
+        XCTAssertFalse(brawSupport.hasBRAWPlaybackSupport)
+        XCTAssertNil(brawSupport.bestBRAWPlayer)
+    }
+    
+    func testRAWFileSupport() {
+        // Test RAW file detection
+        let rawURLs = [
+            URL(fileURLWithPath: "/test/image.rw2"),
+            URL(fileURLWithPath: "/test/image.cr2"),
+            URL(fileURLWithPath: "/test/image.dng"),
+            URL(fileURLWithPath: "/test/image.arw"),
+            URL(fileURLWithPath: "/test/image.nef"),
+            URL(fileURLWithPath: "/test/image.orf"),
+            URL(fileURLWithPath: "/test/image.rwz"),
+            URL(fileURLWithPath: "/test/image.raw")
+        ]
+        
+        for url in rawURLs {
+            let fileInfo = try! FileInfo(url: url)
+            XCTAssertEqual(fileInfo.mediaType, .photo)
+            XCTAssertTrue(fileInfo.isRAWFile)
+            XCTAssertTrue(fileInfo.isViewable)
+        }
+        
+        // Test RAW support utilities
+        let rawSupport = RAWSupport.shared
+        
+        // These should be false in test environment, but we can test the structure
+        XCTAssertTrue(rawSupport.hasPreview) // Preview is always available
+        XCTAssertFalse(rawSupport.hasPhotos)
+        XCTAssertFalse(rawSupport.hasLightroom)
+        XCTAssertFalse(rawSupport.hasCaptureOne)
+        XCTAssertFalse(rawSupport.hasFFmpeg)
+        XCTAssertTrue(rawSupport.hasRAWViewingSupport) // Should be true because of Preview
+        XCTAssertEqual(rawSupport.bestRAWViewer, "Preview")
+    }
+    
     // MARK: - Helper Methods
     
     private func createTestFileInfo(name: String, size: Int64) -> FileInfo {

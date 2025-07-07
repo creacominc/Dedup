@@ -15,12 +15,28 @@ A powerful macOS application for organizing and deduplicating media files from N
 ## Supported File Formats
 
 ### Photos
-- RAW: CR2 (Canon), RW2 (Panasonic), DNG
+- RAW: CR2 (Canon), RW2 (Panasonic), DNG, ARW (Sony), NEF (Nikon), ORF (Olympus), RWZ (Panasonic), RAW (Generic)
 - Processed: TIFF, JPEG, PNG, PSD, BMP
 
+**RAW Support**: The app includes comprehensive RAW image support with multiple viewing options:
+- Native NSImage loading (for compatible RAW files)
+- Capture One integration (professional RAW editor)
+- Adobe Lightroom integration
+- Photos.app integration
+- Preview.app fallback
+- FFmpeg conversion for preview
+- External viewer fallback
+
 ### Videos
-- RAW: BRAW, DNG
+- RAW: BRAW (Blackmagic Design), DNG
 - Compressed: MOV, MP4, AVI, MKV, WMV, FLV, WebM
+
+**BRAW Support**: The app includes comprehensive BRAW video support with multiple playback options:
+- Native AVPlayer (for compatible BRAW files)
+- Blackmagic RAW Player integration
+- DaVinci Resolve integration  
+- FFmpeg conversion for preview
+- External player fallback
 
 ### Audio
 - Lossless: WAV, FLAC
@@ -32,6 +48,28 @@ A powerful macOS application for organizing and deduplicating media files from N
 - macOS 13.0 or later
 - Xcode 15.0 or later
 - Swift 5.9 or later
+
+### BRAW Video Support
+For optimal BRAW video playback, install one or more of the following:
+- **Blackmagic RAW Player** (recommended for BRAW files)
+- **DaVinci Resolve** (professional video editing software)
+- **FFmpeg** (for conversion and metadata extraction)
+  ```bash
+  # Install FFmpeg via Homebrew
+  brew install ffmpeg
+  ```
+
+### RAW Image Support
+For optimal RAW image viewing, install one or more of the following:
+- **Capture One** (professional RAW editor - recommended)
+- **Adobe Lightroom** (professional photo editing software)
+- **Photos.app** (built-in macOS photo management)
+- **Preview.app** (built-in macOS image viewer)
+- **FFmpeg** (for conversion and metadata extraction)
+  ```bash
+  # Install FFmpeg via Homebrew
+  brew install ffmpeg
+  ```
 
 ### Building from Source
 
