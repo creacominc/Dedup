@@ -300,20 +300,20 @@ struct FileDetailView: View {
                     
                     // Media-specific metadata
                     VStack(alignment: .trailing, spacing: 4) {
-                        if let width = file.width, let height = file.height {
+                        if file.width != nil && file.height != nil {
                             Text("Dimensions: \(file.formattedDimensions)")
                             Text("Aspect Ratio: \(file.formattedAspectRatio)")
                         }
                         
-                        if let duration = file.duration {
+                        if file.duration != nil {
                             Text("Duration: \(file.formattedDuration)")
                         }
                         
-                        if let frameRate = file.frameRate {
+                        if file.frameRate != nil {
                             Text("Frame Rate: \(file.formattedFrameRate)")
                         }
                         
-                        if let bitRate = file.bitRate {
+                        if file.bitRate != nil {
                             Text("Bit Rate: \(file.formattedBitRate)")
                         }
                         
@@ -2316,7 +2316,7 @@ class RAWSupport {
         let lines = output.components(separatedBy: .newlines)
         
         var resolution = "Unknown"
-        var colorDepth = "Unknown"
+        let colorDepth = "Unknown"
         var colorSpace = "Unknown"
         var format = "RAW"
         
