@@ -1,5 +1,7 @@
 import Foundation
 import CryptoKit
+import AVFoundation
+import ImageIO
 
 /// Represents a media file with metadata for deduplication
 struct FileInfo: Identifiable, Hashable, Codable {
@@ -20,6 +22,19 @@ struct FileInfo: Identifiable, Hashable, Codable {
     var checksum128GB: String?
     var checksumFull: String?
     
+    // Media metadata
+    var width: Int?
+    var height: Int?
+    var duration: Double?
+    var codec: String?
+    var bitRate: Int?
+    var frameRate: Double?
+    var colorDepth: Int?
+    var colorSpace: String?
+    var audioCodec: String?
+    var audioChannels: Int?
+    var audioSampleRate: Double?
+    
     // Computed properties
     var displayName: String {
         return url.lastPathComponent
@@ -34,6 +49,56 @@ struct FileInfo: Identifiable, Hashable, Codable {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: creationDate)
+    }
+    
+    var formattedDuration: String {
+        guard let duration = duration else { return "Unknown" }
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .positional
+        formatter.zeroFormattingBehavior = .pad
+        return formatter.string(from: duration) ?? "Unknown"
+    }
+    
+    var formattedDimensions: String {
+        guard let width = width, let height = height else { return "Unknown" }
+        return "\(width) × \(height)"
+    }
+    
+    var formattedAspectRatio: String {
+        guard let width = width, let height = height, width > 0, height > 0 else { return "Unknown" }
+        let gcd = greatestCommonDivisor(width, height)
+        let aspectWidth = width / gcd
+        let aspectHeight = height / gcd
+        return "\(aspectWidth):\(aspectHeight)"
+    }
+    
+    var formattedFrameRate: String {
+        guard let frameRate = frameRate else { return "Unknown" }
+        return String(format: "%.2f fps", frameRate)
+    }
+    
+    var formattedBitRate: String {
+        guard let bitRate = bitRate else { return "Unknown" }
+        return ByteCountFormatter.string(fromByteCount: Int64(bitRate), countStyle: .binary) + "/s"
+    }
+    
+    var formattedAudioInfo: String {
+        var parts: [String] = []
+        
+        if let audioCodec = audioCodec {
+            parts.append(audioCodec)
+        }
+        
+        if let audioChannels = audioChannels {
+            parts.append("\(audioChannels) ch")
+        }
+        
+        if let audioSampleRate = audioSampleRate {
+            parts.append(String(format: "%.0f Hz", audioSampleRate))
+        }
+        
+        return parts.isEmpty ? "Unknown" : parts.joined(separator: ", ")
     }
     
     var isViewable: Bool {
@@ -117,6 +182,115 @@ struct FileInfo: Identifiable, Hashable, Codable {
         }
     }
     
+    // MARK: - Metadata Extraction
+    
+    mutating func extractMetadata() async {
+        switch mediaType {
+        case .video:
+            await extractVideoMetadata()
+        case .photo:
+            extractPhotoMetadata()
+        case .audio:
+            await extractAudioMetadata()
+        case .unsupported:
+            break
+        }
+    }
+    
+    private mutating func extractVideoMetadata() async {
+        let asset = AVURLAsset(url: url)
+        do {
+            let videoTracks = try await asset.loadTracks(withMediaType: .video)
+            if let videoTrack = videoTracks.first {
+                let size = try await videoTrack.load(.naturalSize)
+                width = Int(size.width)
+                height = Int(size.height)
+                let formatDescriptions = try await videoTrack.load(.formatDescriptions)
+                if let formatDescription = formatDescriptions.first {
+                    let mediaSubType = CMFormatDescriptionGetMediaSubType(formatDescription)
+                    codec = String(describing: mediaSubType)
+                }
+                let frameRate = try await videoTrack.load(.nominalFrameRate)
+                self.frameRate = Double(frameRate)
+                let bitRate = try await videoTrack.load(.estimatedDataRate)
+                self.bitRate = Int(bitRate)
+            }
+            let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+            if let audioTrack = audioTracks.first {
+                let formatDescriptions = try await audioTrack.load(.formatDescriptions)
+                if let formatDescription = formatDescriptions.first {
+                    let mediaSubType = CMFormatDescriptionGetMediaSubType(formatDescription)
+                    audioCodec = String(describing: mediaSubType)
+                    if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) {
+                        audioChannels = Int(asbd.pointee.mChannelsPerFrame)
+                        audioSampleRate = Double(asbd.pointee.mSampleRate)
+                    }
+                }
+                let bitRate = try await audioTrack.load(.estimatedDataRate)
+                self.bitRate = Int(bitRate)
+            }
+            let duration = try await asset.load(.duration)
+            self.duration = duration.seconds
+        } catch {
+            print("Failed to extract video metadata: \(error)")
+        }
+    }
+    
+    private mutating func extractPhotoMetadata() {
+        guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else { return }
+        
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] else { return }
+        
+        // Get dimensions
+        if let width = properties[kCGImagePropertyPixelWidth as String] as? Int {
+            self.width = width
+        }
+        if let height = properties[kCGImagePropertyPixelHeight as String] as? Int {
+            self.height = height
+        }
+        
+        // Get color depth
+        if let depth = properties[kCGImagePropertyDepth as String] as? Int {
+            colorDepth = depth
+        }
+        
+        // Get color space
+        if let colorSpace = properties[kCGImagePropertyColorModel as String] as? String {
+            self.colorSpace = colorSpace
+        }
+        
+        // Get codec/format
+        if let format = properties[kCGImagePropertyTIFFCompression as String] as? Int {
+            codec = "TIFF Compression \(format)"
+        } else {
+            codec = "Unknown"
+        }
+    }
+    
+    private mutating func extractAudioMetadata() async {
+        let asset = AVURLAsset(url: url)
+        do {
+            let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+            if let audioTrack = audioTracks.first {
+                let formatDescriptions = try await audioTrack.load(.formatDescriptions)
+                if let formatDescription = formatDescriptions.first {
+                    let mediaSubType = CMFormatDescriptionGetMediaSubType(formatDescription)
+                    audioCodec = String(describing: mediaSubType)
+                    if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) {
+                        audioChannels = Int(asbd.pointee.mChannelsPerFrame)
+                        audioSampleRate = Double(asbd.pointee.mSampleRate)
+                    }
+                }
+                let bitRate = try await audioTrack.load(.estimatedDataRate)
+                self.bitRate = Int(bitRate)
+            }
+            let duration = try await asset.load(.duration)
+            self.duration = duration.seconds
+        } catch {
+            print("Failed to extract audio metadata: \(error)")
+        }
+    }
+    
     // MARK: - Duplicate Detection
     
     func isLikelyDuplicate(of other: FileInfo) -> Bool {
@@ -181,6 +355,17 @@ struct FileInfo: Identifiable, Hashable, Codable {
     
     static func == (lhs: FileInfo, rhs: FileInfo) -> Bool {
         return lhs.url == rhs.url
+    }
+    
+    private func greatestCommonDivisor(_ a: Int, _ b: Int) -> Int {
+        var x = a
+        var y = b
+        while y != 0 {
+            let temp = y
+            y = x % y
+            x = temp
+        }
+        return x
     }
 }
 

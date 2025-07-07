@@ -162,7 +162,9 @@ class FileProcessor: ObservableObject {
             // Only process media files
             if isMediaFile(fileURL) {
                 do {
-                    let fileInfo = try FileInfo(url: fileURL)
+                    var fileInfo = try FileInfo(url: fileURL)
+                    // Extract metadata for the file
+                    await fileInfo.extractMetadata()
                     files.append(fileInfo)
                 } catch {
                     print("Failed to process file \(fileURL.path): \(error)")

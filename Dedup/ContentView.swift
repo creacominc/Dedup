@@ -69,7 +69,7 @@ struct FileListView: View {
                     .accessibilityIdentifier("app-subtitle")
             }
             .padding()
-            .background(Color(.windowBackgroundColor))
+            .background(Color(NSColor.windowBackgroundColor))
             
             // Tab buttons
             HStack(spacing: 0) {
@@ -282,34 +282,60 @@ struct FileDetailView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // File info header
+            // File information header
             VStack(alignment: .leading, spacing: 8) {
                 Text(file.displayName)
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                    .font(.headline)
+                    .lineLimit(1)
                 
-                HStack(spacing: 16) {
-                    Label(file.mediaType.displayName, systemImage: iconName)
-                        .foregroundColor(iconColor)
+                // Basic file info
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Size: \(file.formattedSize)")
+                        Text("Created: \(file.formattedCreationDate)")
+                        Text("Type: \(file.mediaType.displayName)")
+                    }
                     
-                    Text(file.formattedSize)
-                        .foregroundColor(.secondary)
+                    Spacer()
                     
-                    Text(file.formattedCreationDate)
-                        .foregroundColor(.secondary)
+                    // Media-specific metadata
+                    VStack(alignment: .trailing, spacing: 4) {
+                        if let width = file.width, let height = file.height {
+                            Text("Dimensions: \(file.formattedDimensions)")
+                            Text("Aspect Ratio: \(file.formattedAspectRatio)")
+                        }
+                        
+                        if let duration = file.duration {
+                            Text("Duration: \(file.formattedDuration)")
+                        }
+                        
+                        if let frameRate = file.frameRate {
+                            Text("Frame Rate: \(file.formattedFrameRate)")
+                        }
+                        
+                        if let bitRate = file.bitRate {
+                            Text("Bit Rate: \(file.formattedBitRate)")
+                        }
+                        
+                        if let codec = file.codec {
+                            Text("Codec: \(codec)")
+                        }
+                        
+                        if let colorDepth = file.colorDepth {
+                            Text("Color Depth: \(colorDepth) bit")
+                        }
+                        
+                        if let colorSpace = file.colorSpace {
+                            Text("Color Space: \(colorSpace)")
+                        }
+                        
+                        if file.mediaType == .video || file.mediaType == .audio {
+                            Text("Audio: \(file.formattedAudioInfo)")
+                        }
+                    }
                 }
-                .font(.subheadline)
-                
-                // Debug information
-                Text("File extension: \(file.fileExtension)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text("Media type: \(file.mediaType.rawValue)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text("Is viewable: \(file.isViewable ? "Yes" : "No")")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                .font(.caption)
+                .foregroundColor(.secondary)
                 
                 // Show in Finder button
                 Button(action: {
@@ -320,6 +346,7 @@ struct FileDetailView: View {
                 .buttonStyle(.bordered)
             }
             .padding()
+            .background(Color(NSColor.windowBackgroundColor))
             
             Divider()
             
@@ -357,7 +384,7 @@ struct FileDetailView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.green.opacity(0.1)) // Debug media content area
+            .background(Color.green.opacity(0.1)) // Debug media content area restored
             .onAppear {
                 print("DEBUG: Media content area appeared for: \(file.displayName)")
                 print("DEBUG: Media content area green background visible - \(file.displayName)")
@@ -460,7 +487,7 @@ struct PhotoView: View {
                 }
             }
         }
-        .padding(.all, 20) // 5% padding (20 points is roughly 5% of typical view sizes)
+        .padding(.all, 10) // Reduced padding for more content space
         .onAppear {
             print("DEBUG: PhotoView appeared for file: \(file.displayName)")
             loadImage()
@@ -498,19 +525,11 @@ struct VideoView: View {
             if let player = player, player.currentItem != nil, player.currentItem?.status != .failed {
                 GeometryReader { geometry in
                     VideoPlayer(player: player)
-                        .aspectRatio(contentMode: .fit)
-                        .frame(
-                            width: geometry.size.width > 0 ? min(geometry.size.width, geometry.size.height * 16/9) : 100,
-                            height: geometry.size.height > 0 ? min(geometry.size.height, geometry.size.width * 9/16) : 100
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        .cornerRadius(8)
-                        .background(Color.red.opacity(0.3)) // Temporary debug background
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.red.opacity(0.3)) // Debug background restored
                         .onAppear {
-                            let calculatedWidth = geometry.size.width > 0 ? min(geometry.size.width, geometry.size.height * 16/9) : 100
-                            let calculatedHeight = geometry.size.height > 0 ? min(geometry.size.height, geometry.size.width * 9/16) : 100
-                            print("DEBUG: VideoPlayer frame - available: \(geometry.size.width) x \(geometry.size.height), calculated: \(calculatedWidth) x \(calculatedHeight)")
-                            print("DEBUG: VideoPlayer red background visible - \(file.displayName)")
+                            print("DEBUG: VideoPlayer frame - available: \(geometry.size.width) x \(geometry.size.height)")
+                            print("DEBUG: VideoPlayer appeared for: \(file.displayName)")
                         }
                         .onDisappear {
                             print("DEBUG: VideoPlayer disappeared for: \(file.displayName)")
@@ -581,59 +600,11 @@ struct VideoView: View {
                     print("DEBUG: VideoView state - player: \(player != nil), isLoading: \(isLoading), videoError: \(videoError ?? "none")")
                 }
             }
-            
-            // Video controls - only show if player exists
-            if player != nil {
-                VStack(spacing: 8) {
-                    // Progress slider
-                    Slider(value: Binding(
-                        get: { currentTime },
-                        set: { newValue in
-                            if let player = player {
-                                let time = CMTime(seconds: newValue, preferredTimescale: 1)
-                                player.seek(to: time)
-                                currentTime = newValue
-                            }
-                        }
-                    ), in: 0...max(duration, 1))
-                    
-                    HStack {
-                        Text(formatTime(currentTime))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            if isPlaying {
-                                player?.pause()
-                            } else {
-                                player?.play()
-                            }
-                            isPlaying.toggle()
-                        }) {
-                            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                .font(.title2)
-                        }
-                        .buttonStyle(.plain)
-                        
-                        Spacer()
-                        
-                        Text(formatTime(duration))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(Color(.controlBackgroundColor))
-            }
         }
-        .padding(.all, 20) // 5% padding (20 points is roughly 5% of typical view sizes)
-        .background(Color.blue.opacity(0.1)) // Debug container background
+        .padding(.all, 10) // Reduced padding for more video space
+        .background(Color.blue.opacity(0.1)) // Debug container background restored
         .onAppear {
             print("DEBUG: VideoView appeared for file: \(file.displayName)")
-            print("DEBUG: VideoView blue background visible - \(file.displayName)")
             resetState()
             setupPlayer()
         }
@@ -851,7 +822,7 @@ struct AudioView: View {
                 .cornerRadius(8)
             }
         }
-        .padding(.all, 20) // 5% padding (20 points is roughly 5% of typical view sizes)
+        .padding(.all, 10) // Reduced padding for more content space
         .onAppear {
             print("DEBUG: AudioView appeared for file: \(file.displayName)")
             setupPlayer()
@@ -940,7 +911,7 @@ struct UnsupportedFileView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(.all, 20) // 5% padding (20 points is roughly 5% of typical view sizes)
+        .padding(.all, 10) // Reduced padding for more content space
         .onAppear {
             print("DEBUG: UnsupportedFileView appeared for file: \(file.displayName)")
         }
@@ -1156,19 +1127,11 @@ struct BRAWVideoView: View {
             if let player = player, player.currentItem != nil, player.currentItem?.status != .failed {
                 GeometryReader { geometry in
                     VideoPlayer(player: player)
-                        .aspectRatio(contentMode: .fit)
-                        .frame(
-                            width: geometry.size.width > 0 ? min(geometry.size.width, geometry.size.height * 16/9) : 100,
-                            height: geometry.size.height > 0 ? min(geometry.size.height, geometry.size.width * 9/16) : 100
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        .cornerRadius(8)
-                        .background(Color.red.opacity(0.3)) // Temporary debug background
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.red.opacity(0.3)) // Debug background restored
                         .onAppear {
-                            let calculatedWidth = geometry.size.width > 0 ? min(geometry.size.width, geometry.size.height * 16/9) : 100
-                            let calculatedHeight = geometry.size.height > 0 ? min(geometry.size.height, geometry.size.width * 9/16) : 100
-                            print("DEBUG: VideoPlayer frame - available: \(geometry.size.width) x \(geometry.size.height), calculated: \(calculatedWidth) x \(calculatedHeight)")
-                            print("DEBUG: VideoPlayer red background visible - \(file.displayName)")
+                            print("DEBUG: VideoPlayer frame - available: \(geometry.size.width) x \(geometry.size.height)")
+                            print("DEBUG: VideoPlayer appeared for: \(file.displayName)")
                         }
                         .onDisappear {
                             print("DEBUG: VideoPlayer disappeared for: \(file.displayName)")
@@ -1254,56 +1217,9 @@ struct BRAWVideoView: View {
                     print("DEBUG: BRAWVideoView state - player: \(player != nil), isLoading: \(isLoading), videoError: \(videoError ?? "none")")
                 }
             }
-            
-            // Video controls - only show if player exists
-            if player != nil {
-                VStack(spacing: 8) {
-                    // Progress slider
-                    Slider(value: Binding(
-                        get: { currentTime },
-                        set: { newValue in
-                            if let player = player {
-                                let time = CMTime(seconds: newValue, preferredTimescale: 1)
-                                player.seek(to: time)
-                                currentTime = newValue
-                            }
-                        }
-                    ), in: 0...max(duration, 1))
-                    
-                    HStack {
-                        Text(formatTime(currentTime))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            if isPlaying {
-                                player?.pause()
-                            } else {
-                                player?.play()
-                            }
-                            isPlaying.toggle()
-                        }) {
-                            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                .font(.title2)
-                        }
-                        .buttonStyle(.plain)
-                        
-                        Spacer()
-                        
-                        Text(formatTime(duration))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(Color(.controlBackgroundColor))
-            }
         }
-        .padding(.all, 20) // 5% padding (20 points is roughly 5% of typical view sizes)
-        .background(Color.blue.opacity(0.1)) // Debug container background
+        .padding(.all, 10) // Reduced padding for more video space
+        .background(Color.blue.opacity(0.1)) // Debug container background restored
         .onAppear {
             print("DEBUG: BRAWVideoView appeared for file: \(file.displayName)")
             print("DEBUG: BRAWVideoView blue background visible - \(file.displayName)")
