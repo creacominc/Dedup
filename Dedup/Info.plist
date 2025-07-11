@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>Dedup</string>
 	<key>CFBundleIdentifier</key>
-	<string>ca.creacom.dedup</string>
+	<string>com.creacom.dedup</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -25,4 +25,4 @@
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>
-</plist> 
+</plist>

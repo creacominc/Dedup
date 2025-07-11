@@ -49,10 +49,10 @@ class FileProcessor: ObservableObject {
     
     func startProcessing() async {
         guard let sourceURL = sourceURL, let targetURL = targetURL else {
-            errorMessage = "Please select both source and target directories"
+            errorMessage = "Please select both source and target directories.  "
             return
         }
-        
+        print( "source: \(sourceURL), target: \(targetURL)" )
         isProcessing = true
         progress = 0.0
         errorMessage = nil
