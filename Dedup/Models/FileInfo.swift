@@ -431,6 +431,120 @@ struct FileInfo: Identifiable, Hashable, Codable {
     }
     
     /// Efficiently compares files with lazy checksum computation
+    /// Returns (isDuplicate, mutatedTargetFile)
+    mutating func isDefinitelyDuplicateEfficientWithTarget(of targetFile: FileInfo) async -> (Bool, FileInfo) {
+        guard size == targetFile.size else { 
+            print("🔍 [COMPARE] Size mismatch: \(displayName) (\(formattedSize)) vs \(targetFile.displayName) (\(targetFile.formattedSize))")
+            return (false, targetFile)
+        }
+        
+        print("🔍 [COMPARE] Comparing \(displayName) vs \(targetFile.displayName) (same size: \(formattedSize))")
+        
+        // Create a mutable copy of the target file to store its checksums
+        var mutableTargetFile = targetFile
+        
+        // Compare 1KB checksums first
+        do {
+            let myChecksum1KB = try await computeChecksumIfNeeded(for: 1024)
+            let targetChecksum1KB = try await mutableTargetFile.computeChecksumIfNeeded(for: 1024)
+            
+            if myChecksum1KB != targetChecksum1KB {
+                print("🔍 [COMPARE] ❌ 1KB checksum mismatch: \(displayName) vs \(targetFile.displayName)")
+                return (false, mutableTargetFile)
+            }
+            print("🔍 [COMPARE] ✅ 1KB checksums match: \(displayName) vs \(targetFile.displayName)")
+        } catch {
+            print("🔍 [COMPARE] ❌ Error computing 1KB checksums: \(error)")
+            return (false, mutableTargetFile)
+        }
+        
+        // Compare 4GB checksums if file is large enough
+        if size >= 4 * 1024 * 1024 * 1024 {
+            do {
+                let myChecksum4GB = try await computeChecksumIfNeeded(for: 4 * 1024 * 1024 * 1024)
+                let targetChecksum4GB = try await mutableTargetFile.computeChecksumIfNeeded(for: 4 * 1024 * 1024 * 1024)
+                
+                if myChecksum4GB != targetChecksum4GB {
+                    print("🔍 [COMPARE] ❌ 4GB checksum mismatch: \(displayName) vs \(targetFile.displayName)")
+                    return (false, mutableTargetFile)
+                }
+                print("🔍 [COMPARE] ✅ 4GB checksums match: \(displayName) vs \(targetFile.displayName)")
+            } catch {
+                print("🔍 [COMPARE] ❌ Error computing 4GB checksums: \(error)")
+                return (false, mutableTargetFile)
+            }
+        }
+        
+        // Compare 12GB checksums if file is large enough
+        if size >= 12 * 1024 * 1024 * 1024 {
+            do {
+                let myChecksum12GB = try await computeChecksumIfNeeded(for: 12 * 1024 * 1024 * 1024)
+                let targetChecksum12GB = try await mutableTargetFile.computeChecksumIfNeeded(for: 12 * 1024 * 1024 * 1024)
+                
+                if myChecksum12GB != targetChecksum12GB {
+                    print("🔍 [COMPARE] ❌ 12GB checksum mismatch: \(displayName) vs \(targetFile.displayName)")
+                    return (false, mutableTargetFile)
+                }
+                print("🔍 [COMPARE] ✅ 12GB checksums match: \(displayName) vs \(targetFile.displayName)")
+            } catch {
+                print("🔍 [COMPARE] ❌ Error computing 12GB checksums: \(error)")
+                return (false, mutableTargetFile)
+            }
+        }
+        
+        // Compare 64GB checksums if file is large enough
+        if size >= 64 * 1024 * 1024 * 1024 {
+            do {
+                let myChecksum64GB = try await computeChecksumIfNeeded(for: 64 * 1024 * 1024 * 1024)
+                let targetChecksum64GB = try await mutableTargetFile.computeChecksumIfNeeded(for: 64 * 1024 * 1024 * 1024)
+                
+                if myChecksum64GB != targetChecksum64GB {
+                    print("🔍 [COMPARE] ❌ 64GB checksum mismatch: \(displayName) vs \(targetFile.displayName)")
+                    return (false, mutableTargetFile)
+                }
+                print("🔍 [COMPARE] ✅ 64GB checksums match: \(displayName) vs \(targetFile.displayName)")
+            } catch {
+                print("🔍 [COMPARE] ❌ Error computing 64GB checksums: \(error)")
+                return (false, mutableTargetFile)
+            }
+        }
+        
+        // Compare 128GB checksums if file is large enough
+        if size >= 128 * 1024 * 1024 * 1024 {
+            do {
+                let myChecksum128GB = try await computeChecksumIfNeeded(for: 128 * 1024 * 1024 * 1024)
+                let targetChecksum128GB = try await mutableTargetFile.computeChecksumIfNeeded(for: 128 * 1024 * 1024 * 1024)
+                
+                if myChecksum128GB != targetChecksum128GB {
+                    print("🔍 [COMPARE] ❌ 128GB checksum mismatch: \(displayName) vs \(targetFile.displayName)")
+                    return (false, mutableTargetFile)
+                }
+                print("🔍 [COMPARE] ✅ 128GB checksums match: \(displayName) vs \(targetFile.displayName)")
+            } catch {
+                print("🔍 [COMPARE] ❌ Error computing 128GB checksums: \(error)")
+                return (false, mutableTargetFile)
+            }
+        }
+        
+        // Finally compare full checksums
+        do {
+            let myChecksumFull = try await computeChecksumIfNeeded(for: size)
+            let targetChecksumFull = try await mutableTargetFile.computeChecksumIfNeeded(for: size)
+            
+            if myChecksumFull != targetChecksumFull {
+                print("🔍 [COMPARE] ❌ FULL checksum mismatch: \(displayName) vs \(targetFile.displayName)")
+                return (false, mutableTargetFile)
+            }
+            print("🔍 [COMPARE] ✅ FULL checksums match: \(displayName) vs \(targetFile.displayName)")
+            print("🔍 [COMPARE] 🎉 DUPLICATE CONFIRMED: \(displayName) vs \(targetFile.displayName)")
+            return (true, mutableTargetFile)
+        } catch {
+            print("🔍 [COMPARE] ❌ Error computing FULL checksums: \(error)")
+            return (false, mutableTargetFile)
+        }
+    }
+    
+    /// Efficiently compares files with lazy checksum computation
     mutating func isDefinitelyDuplicateEfficient(of other: FileInfo) async -> Bool {
         guard size == other.size else { 
             print("🔍 [COMPARE] Size mismatch: \(displayName) (\(formattedSize)) vs \(other.displayName) (\(other.formattedSize))")
@@ -439,10 +553,12 @@ struct FileInfo: Identifiable, Hashable, Codable {
         
         print("🔍 [COMPARE] Comparing \(displayName) vs \(other.displayName) (same size: \(formattedSize))")
         
+        // Create a single mutable copy of the other file to store its checksums
+        var mutableOther = other
+        
         // Compare 1KB checksums first
         do {
             let myChecksum1KB = try await computeChecksumIfNeeded(for: 1024)
-            var mutableOther = other
             let otherChecksum1KB = try await mutableOther.computeChecksumIfNeeded(for: 1024)
             
             if myChecksum1KB != otherChecksum1KB {
@@ -459,7 +575,6 @@ struct FileInfo: Identifiable, Hashable, Codable {
         if size >= 4 * 1024 * 1024 * 1024 {
             do {
                 let myChecksum4GB = try await computeChecksumIfNeeded(for: 4 * 1024 * 1024 * 1024)
-                var mutableOther = other
                 let otherChecksum4GB = try await mutableOther.computeChecksumIfNeeded(for: 4 * 1024 * 1024 * 1024)
                 
                 if myChecksum4GB != otherChecksum4GB {
@@ -477,7 +592,6 @@ struct FileInfo: Identifiable, Hashable, Codable {
         if size >= 12 * 1024 * 1024 * 1024 {
             do {
                 let myChecksum12GB = try await computeChecksumIfNeeded(for: 12 * 1024 * 1024 * 1024)
-                var mutableOther = other
                 let otherChecksum12GB = try await mutableOther.computeChecksumIfNeeded(for: 12 * 1024 * 1024 * 1024)
                 
                 if myChecksum12GB != otherChecksum12GB {
@@ -495,7 +609,6 @@ struct FileInfo: Identifiable, Hashable, Codable {
         if size >= 64 * 1024 * 1024 * 1024 {
             do {
                 let myChecksum64GB = try await computeChecksumIfNeeded(for: 64 * 1024 * 1024 * 1024)
-                var mutableOther = other
                 let otherChecksum64GB = try await mutableOther.computeChecksumIfNeeded(for: 64 * 1024 * 1024 * 1024)
                 
                 if myChecksum64GB != otherChecksum64GB {
@@ -513,10 +626,9 @@ struct FileInfo: Identifiable, Hashable, Codable {
         if size >= 128 * 1024 * 1024 * 1024 {
             do {
                 let myChecksum128GB = try await computeChecksumIfNeeded(for: 128 * 1024 * 1024 * 1024)
-                var mutableOther = other
-                let otherChecksum128GB = try await mutableOther.computeChecksumIfNeeded(for: 128 * 1024 * 1024 * 1024)
+                let targetChecksum128GB = try await mutableOther.computeChecksumIfNeeded(for: 128 * 1024 * 1024 * 1024)
                 
-                if myChecksum128GB != otherChecksum128GB {
+                if myChecksum128GB != targetChecksum128GB {
                     print("🔍 [COMPARE] ❌ 128GB checksum mismatch: \(displayName) vs \(other.displayName)")
                     return false
                 }
@@ -530,7 +642,6 @@ struct FileInfo: Identifiable, Hashable, Codable {
         // Finally compare full checksums
         do {
             let myChecksumFull = try await computeChecksumIfNeeded(for: size)
-            var mutableOther = other
             let otherChecksumFull = try await mutableOther.computeChecksumIfNeeded(for: size)
             
             if myChecksumFull != otherChecksumFull {

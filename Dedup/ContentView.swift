@@ -16,8 +16,13 @@ struct ContentView: View {
             // Detail view for selected file
             if let selectedFile = selectedFile {
                 if selectedTab == 1 { // Duplicates tab
-                    let targetDuplicates = fileProcessor.findTargetDuplicates(for: selectedFile)
-                    DuplicateDetailView(sourceFile: selectedFile, targetFiles: targetDuplicates)
+                    // Find the duplicate group for the selected file
+                    if let group = fileProcessor.duplicateGroups.first(where: { $0.source.id == selectedFile.id }) {
+                        DuplicateDetailView(sourceFile: group.source, targetFiles: group.targets)
+                    } else {
+                        // Fallback: show just the selected file
+                        FileDetailView(file: selectedFile)
+                    }
                 } else {
                     FileDetailView(file: selectedFile)
                 }
@@ -261,22 +266,19 @@ struct DuplicatesListView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
-                    ForEach(Array(fileProcessor.duplicateGroups.enumerated()), id: \.offset) { index, group in
-                        // Remove the Section header, just show the files
-                        ForEach(group, id: \.id) { file in
-                            DuplicateFileRowView(file: file, group: group, fileProcessor: fileProcessor)
-                                .onTapGesture {
-                                    selectedFile = file
+                    ForEach(fileProcessor.duplicateGroups) { group in
+                        DuplicateFileRowView(group: group, fileProcessor: fileProcessor)
+                            .onTapGesture {
+                                selectedFile = group.source
+                            }
+                            .background(selectedDuplicates.contains(group.source) ? Color.accentColor.opacity(0.2) : Color.clear)
+                            .onTapGesture {
+                                if selectedDuplicates.contains(group.source) {
+                                    selectedDuplicates.remove(group.source)
+                                } else {
+                                    selectedDuplicates.insert(group.source)
                                 }
-                                .background(selectedDuplicates.contains(file) ? Color.accentColor.opacity(0.2) : Color.clear)
-                                .onTapGesture {
-                                    if selectedDuplicates.contains(file) {
-                                        selectedDuplicates.remove(file)
-                                    } else {
-                                        selectedDuplicates.insert(file)
-                                    }
-                                }
-                        }
+                            }
                     }
                 }
                 .listStyle(PlainListStyle())
@@ -1109,19 +1111,16 @@ struct FileRowView: View {
 }
 
 struct DuplicateFileRowView: View {
-    let file: FileInfo
-    let group: [FileInfo]
+    let group: DuplicateGroup
     @ObservedObject var fileProcessor: FileProcessor
     
-    private var targetDuplicates: [FileInfo] {
-        fileProcessor.findTargetDuplicates(for: file)
-    }
-    
     var body: some View {
+        let file = group.source
+        let targetDuplicates = group.targets
         HStack(spacing: 12) {
-            Image(systemName: iconName)
+            Image(systemName: iconName(for: file))
                 .font(.title2)
-                .foregroundColor(iconColor)
+                .foregroundColor(iconColor(for: file))
                 .frame(width: 24)
             
             VStack(alignment: .leading, spacing: 2) {
@@ -1140,7 +1139,7 @@ struct DuplicateFileRowView: View {
                         .font(.caption)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(mediaTypeColor.opacity(0.2))
+                        .background(mediaTypeColor(for: file).opacity(0.2))
                         .cornerRadius(4)
                     
                     Text(file.formattedSize)
@@ -1173,11 +1172,6 @@ struct DuplicateFileRowView: View {
                     }
                     .padding(.top, 4)
                     .padding(.leading, 8)
-                } else if group.count > 1 {
-                    Text("Duplicate of \(group.count - 1) other file(s)")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                        .padding(.top, 2)
                 } else {
                     Text("Single file in group")
                         .font(.caption)
@@ -1201,42 +1195,28 @@ struct DuplicateFileRowView: View {
         .padding(.vertical, 4)
     }
     
-    private var iconName: String {
+    private func iconName(for file: FileInfo) -> String {
         switch file.mediaType {
-        case .photo:
-            return "photo"
-        case .video:
-            return "video"
-        case .audio:
-            return "music.note"
-        case .unsupported:
-            return "exclamationmark.triangle"
+        case .photo: return "photo"
+        case .video: return "video"
+        case .audio: return "music.note"
+        case .unsupported: return "exclamationmark.triangle"
         }
     }
-    
-    private var iconColor: Color {
+    private func iconColor(for file: FileInfo) -> Color {
         switch file.mediaType {
-        case .photo:
-            return .blue
-        case .video:
-            return .red
-        case .audio:
-            return .green
-        case .unsupported:
-            return .orange
+        case .photo: return .blue
+        case .video: return .red
+        case .audio: return .green
+        case .unsupported: return .orange
         }
     }
-    
-    private var mediaTypeColor: Color {
+    private func mediaTypeColor(for file: FileInfo) -> Color {
         switch file.mediaType {
-        case .photo:
-            return .blue
-        case .video:
-            return .red
-        case .audio:
-            return .green
-        case .unsupported:
-            return .orange
+        case .photo: return .blue
+        case .video: return .red
+        case .audio: return .green
+        case .unsupported: return .orange
         }
     }
 }
