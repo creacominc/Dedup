@@ -296,25 +296,28 @@ class FileProcessor: ObservableObject {
             } else {
                 // Multiple files of same size - need to check for duplicates
                 print("🔄 [PROCESS] Multiple files of same size, checking for duplicates...")
-                let duplicates = await findDuplicates(in: files)
-                if duplicates.count > 1 {
-                    // For source-only duplicate groups, store as a group with no targets
-                    for file in duplicates {
-                        let group = DuplicateGroup(source: file, targets: [])
+                
+                // Find all duplicate groups among these files
+                let duplicateGroupsInSize = await findDuplicateGroups(in: files)
+                
+                if duplicateGroupsInSize.count > 0 {
+                    // Add all duplicate groups found
+                    for group in duplicateGroupsInSize {
                         duplicateGroups.append(group)
                     }
-                    print("🔄 [PROCESS] Found source-only duplicate group with \(duplicates.count) files")
-                } else if duplicates.count == 1 {
-                    let file = duplicates[0]
-                    let existsInTarget = await fileExistsInTarget(file)
-                    if !existsInTarget {
-                        filesToMove.append(file)
-                        print("🔄 [PROCESS] ✅ Best duplicate will be moved: \(file.displayName)")
-                    } else {
-                        print("🔄 [PROCESS] ❌ Best duplicate exists in target: \(file.displayName)")
-                    }
+                    print("🔄 [PROCESS] Found \(duplicateGroupsInSize.count) source-only duplicate groups")
                 } else {
-                    print("🔄 [PROCESS] No unique files found in this size group")
+                    // No duplicates found - check if any unique files should be moved
+                    let uniqueFiles = await findUniqueFiles(in: files)
+                    for file in uniqueFiles {
+                        let existsInTarget = await fileExistsInTarget(file)
+                        if !existsInTarget {
+                            filesToMove.append(file)
+                            print("🔄 [PROCESS] ✅ File will be moved: \(file.displayName)")
+                        } else {
+                            print("🔄 [PROCESS] ❌ File exists in target: \(file.displayName)")
+                        }
+                    }
                 }
             }
         }
@@ -340,6 +343,7 @@ class FileProcessor: ObservableObject {
             print("🔍 [CACHE_DUMP]     Size: \(file.formattedSize)")
             print("🔍 [CACHE_DUMP]     Checksums computed:")
             print("🔍 [CACHE_DUMP]       1KB: \(status.hasComputed1KB ? "✅" : "❌")")
+            print("🔍 [CACHE_DUMP]       1GB: \(status.hasComputed1GB ? "✅" : "❌")")
             print("🔍 [CACHE_DUMP]       4GB: \(status.hasComputed4GB ? "✅" : "❌")")
             print("🔍 [CACHE_DUMP]       12GB: \(status.hasComputed12GB ? "✅" : "❌")")
             print("🔍 [CACHE_DUMP]       64GB: \(status.hasComputed64GB ? "✅" : "❌")")
@@ -355,6 +359,7 @@ class FileProcessor: ObservableObject {
             print("🔍 [CACHE_DUMP]     Size: \(file.formattedSize)")
             print("🔍 [CACHE_DUMP]     Checksums computed:")
             print("🔍 [CACHE_DUMP]       1KB: \(status.hasComputed1KB ? "✅" : "❌")")
+            print("🔍 [CACHE_DUMP]       1GB: \(status.hasComputed1GB ? "✅" : "❌")")
             print("🔍 [CACHE_DUMP]       4GB: \(status.hasComputed4GB ? "✅" : "❌")")
             print("🔍 [CACHE_DUMP]       12GB: \(status.hasComputed12GB ? "✅" : "❌")")
             print("🔍 [CACHE_DUMP]       64GB: \(status.hasComputed64GB ? "✅" : "❌")")
@@ -364,15 +369,17 @@ class FileProcessor: ObservableObject {
         
         // Summary statistics
         let sourceWithChecksums = sourceFiles.filter { file in
-            file.checksumStatus.hasComputed1KB || file.checksumStatus.hasComputed4GB || 
-            file.checksumStatus.hasComputed12GB || file.checksumStatus.hasComputed64GB || 
-            file.checksumStatus.hasComputed128GB || file.checksumStatus.hasComputedFull
+            file.checksumStatus.hasComputed1KB || file.checksumStatus.hasComputed1GB || 
+            file.checksumStatus.hasComputed4GB || file.checksumStatus.hasComputed12GB || 
+            file.checksumStatus.hasComputed64GB || file.checksumStatus.hasComputed128GB || 
+            file.checksumStatus.hasComputedFull
         }.count
         
         let targetWithChecksums = targetFiles.filter { file in
-            file.checksumStatus.hasComputed1KB || file.checksumStatus.hasComputed4GB || 
-            file.checksumStatus.hasComputed12GB || file.checksumStatus.hasComputed64GB || 
-            file.checksumStatus.hasComputed128GB || file.checksumStatus.hasComputedFull
+            file.checksumStatus.hasComputed1KB || file.checksumStatus.hasComputed1GB || 
+            file.checksumStatus.hasComputed4GB || file.checksumStatus.hasComputed12GB || 
+            file.checksumStatus.hasComputed64GB || file.checksumStatus.hasComputed128GB || 
+            file.checksumStatus.hasComputedFull
         }.count
         
         print("🔍 [CACHE_DUMP] Summary:")
@@ -608,6 +615,168 @@ class FileProcessor: ObservableObject {
         return sortedDuplicates
     }
     
+    private func findDuplicateGroups(in files: [FileInfo]) async -> [DuplicateGroup] {
+        var groups: [DuplicateGroup] = []
+        print("🔍 [DUPLICATES] Finding duplicate groups among \(files.count) files of same size...")
+        
+        for (index, file) in files.enumerated() {
+            print("🔍 [DUPLICATES] Checking file \(index + 1)/\(files.count): \(file.displayName)")
+            var isDuplicate = false
+            var duplicateReason = ""
+            
+            // Check against other source files
+            for otherFile in files {
+                if file != otherFile && file.size == otherFile.size {
+                    print("🔍 [DUPLICATES] Comparing against other source: \(file.displayName) vs \(otherFile.displayName)")
+                    
+                    // Log cache state before comparison
+                    print("🔍 [DUPLICATES] Cache state before comparison:")
+                    print("🔍 [DUPLICATES]   File \(file.displayName) cache: \(formatCacheStatus(file.checksumStatus))")
+                    print("🔍 [DUPLICATES]   Other file \(otherFile.displayName) cache: \(formatCacheStatus(otherFile.checksumStatus))")
+                    
+                    // Create mutable copies for comparison
+                    var mutableFile = file
+                    var mutableOtherFile = otherFile
+                    if await mutableFile.isDefinitelyDuplicateEfficient(of: mutableOtherFile) {
+                        print("🔍 [DUPLICATES] ❌ File is duplicate of other source file: \(file.displayName)")
+                        isDuplicate = true
+                        duplicateReason = "duplicate of other source file \(otherFile.displayName)"
+                        
+                        // Update the original arrays with the computed checksums
+                        if let sourceIndex = sourceFiles.firstIndex(where: { $0.id == file.id }) {
+                            sourceFiles[sourceIndex] = mutableFile
+                        }
+                        if let otherSourceIndex = sourceFiles.firstIndex(where: { $0.id == otherFile.id }) {
+                            sourceFiles[otherSourceIndex] = mutableOtherFile
+                        }
+                        
+                        // Log cache state after comparison
+                        print("�� [DUPLICATES] Cache state after comparison:")
+                        print("🔍 [DUPLICATES]   File \(mutableFile.displayName) cache: \(formatCacheStatus(mutableFile.checksumStatus))")
+                        print("🔍 [DUPLICATES]   Other file \(mutableOtherFile.displayName) cache: \(formatCacheStatus(mutableOtherFile.checksumStatus))")
+                        break
+                    } else {
+                        print("🔍 [DUPLICATES] ✅ File is NOT duplicate of other source: \(file.displayName)")
+                        
+                        // Update the original arrays with the computed checksums
+                        if let sourceIndex = sourceFiles.firstIndex(where: { $0.id == file.id }) {
+                            sourceFiles[sourceIndex] = mutableFile
+                        }
+                        if let otherSourceIndex = sourceFiles.firstIndex(where: { $0.id == otherFile.id }) {
+                            sourceFiles[otherSourceIndex] = mutableOtherFile
+                        }
+                        
+                        // Log cache state after comparison
+                        print("🔍 [DUPLICATES] Cache state after comparison:")
+                        print("🔍 [DUPLICATES]   File \(mutableFile.displayName) cache: \(formatCacheStatus(mutableFile.checksumStatus))")
+                        print("🔍 [DUPLICATES]   Other file \(mutableOtherFile.displayName) cache: \(formatCacheStatus(mutableOtherFile.checksumStatus))")
+                    }
+                }
+            }
+            
+            if isDuplicate {
+                let group = DuplicateGroup(source: file, targets: []) // Source-only group
+                groups.append(group)
+                print("🔍 [DUPLICATES] ✅ Found source-only duplicate group: \(file.displayName)")
+            }
+        }
+        
+        print("🔍 [DUPLICATES] Found \(groups.count) source-only duplicate groups")
+        return groups
+    }
+    
+    private func findUniqueFiles(in files: [FileInfo]) async -> [FileInfo] {
+        var uniqueFiles: [FileInfo] = []
+        print("🔍 [UNIQUE] Finding unique files among \(files.count) files of same size...")
+        
+        for (index, file) in files.enumerated() {
+            print("🔍 [UNIQUE] Checking file \(index + 1)/\(files.count): \(file.displayName)")
+            var isUnique = true
+            
+            // Check against other source files
+            for otherFile in files {
+                if file != otherFile && file.size == otherFile.size {
+                    print("🔍 [UNIQUE] Comparing against other source: \(file.displayName) vs \(otherFile.displayName)")
+                    
+                    // Log cache state before comparison
+                    print("🔍 [UNIQUE] Cache state before comparison:")
+                    print("🔍 [UNIQUE]   File \(file.displayName) cache: \(formatCacheStatus(file.checksumStatus))")
+                    print("🔍 [UNIQUE]   Other file \(otherFile.displayName) cache: \(formatCacheStatus(otherFile.checksumStatus))")
+                    
+                    // Create mutable copies for comparison
+                    var mutableFile = file
+                    var mutableOtherFile = otherFile
+                    if await mutableFile.isDefinitelyDuplicateEfficient(of: mutableOtherFile) {
+                        print("🔍 [UNIQUE] ❌ File is duplicate of other source file: \(file.displayName)")
+                        isUnique = false
+                        break
+                    } else {
+                        print("🔍 [UNIQUE] ✅ File is NOT duplicate of other source: \(file.displayName)")
+                        
+                        // Update the original arrays with the computed checksums
+                        if let sourceIndex = sourceFiles.firstIndex(where: { $0.id == file.id }) {
+                            sourceFiles[sourceIndex] = mutableFile
+                        }
+                        if let otherSourceIndex = sourceFiles.firstIndex(where: { $0.id == otherFile.id }) {
+                            sourceFiles[otherSourceIndex] = mutableOtherFile
+                        }
+                        
+                        // Log cache state after comparison
+                        print("🔍 [UNIQUE] Cache state after comparison:")
+                        print("🔍 [UNIQUE]   File \(mutableFile.displayName) cache: \(formatCacheStatus(mutableFile.checksumStatus))")
+                        print("🔍 [UNIQUE]   Other file \(mutableOtherFile.displayName) cache: \(formatCacheStatus(mutableOtherFile.checksumStatus))")
+                    }
+                }
+            }
+            
+            // Check against target files
+            for targetFile in targetFiles {
+                if file.size == targetFile.size {
+                    print("🔍 [UNIQUE] Comparing against target: \(file.displayName) vs \(targetFile.displayName)")
+                    
+                    // Log cache state before comparison
+                    print("🔍 [UNIQUE] Cache state before comparison:")
+                    print("🔍 [UNIQUE]   File \(file.displayName) cache: \(formatCacheStatus(file.checksumStatus))")
+                    print("🔍 [UNIQUE]   Target file \(targetFile.displayName) cache: \(formatCacheStatus(targetFile.checksumStatus))")
+                    
+                    // Create mutable copies for comparison
+                    var mutableFile = file
+                    var mutableTargetFile = targetFile
+                    if await mutableFile.isDefinitelyDuplicateEfficient(of: mutableTargetFile) {
+                        print("🔍 [UNIQUE] ❌ File is duplicate of target: \(file.displayName)")
+                        isUnique = false
+                        break
+                    } else {
+                        print("🔍 [UNIQUE] ✅ File is NOT duplicate of target: \(file.displayName)")
+                        
+                        // Update the original arrays with the computed checksums
+                        if let sourceIndex = sourceFiles.firstIndex(where: { $0.id == file.id }) {
+                            sourceFiles[sourceIndex] = mutableFile
+                        }
+                        if let targetIndex = targetFiles.firstIndex(where: { $0.id == targetFile.id }) {
+                            targetFiles[targetIndex] = mutableTargetFile
+                        }
+                        
+                        // Log cache state after comparison
+                        print("🔍 [UNIQUE] Cache state after comparison:")
+                        print("🔍 [UNIQUE]   File \(mutableFile.displayName) cache: \(formatCacheStatus(mutableFile.checksumStatus))")
+                        print("🔍 [UNIQUE]   Target file \(mutableTargetFile.displayName) cache: \(formatCacheStatus(mutableTargetFile.checksumStatus))")
+                    }
+                }
+            }
+            
+            if isUnique {
+                uniqueFiles.append(file)
+                print("🔍 [UNIQUE] ✅ File is unique: \(file.displayName) - no duplicates found")
+            } else {
+                print("🔍 [UNIQUE] ❌ File is NOT unique: \(file.displayName) - \(isUnique ? "duplicate of other source" : "duplicate of target")")
+            }
+        }
+        
+        print("🔍 [UNIQUE] Found \(uniqueFiles.count) unique files out of \(files.count) total")
+        return uniqueFiles
+    }
+    
     private func getDestinationURL(for file: FileInfo, in targetURL: URL) throws -> URL {
         let calendar = Calendar.current
         let components = calendar.dateComponents([.year, .month, .day], from: file.creationDate)
@@ -683,6 +852,7 @@ class FileProcessor: ObservableObject {
     private func formatCacheStatus(_ status: ChecksumStatus) -> String {
         var parts: [String] = []
         if status.hasComputed1KB { parts.append("1KB") }
+        if status.hasComputed1GB { parts.append("1GB") }
         if status.hasComputed4GB { parts.append("4GB") }
         if status.hasComputed12GB { parts.append("12GB") }
         if status.hasComputed64GB { parts.append("64GB") }

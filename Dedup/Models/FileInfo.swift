@@ -6,6 +6,7 @@ import ImageIO
 /// Tracks checksum computation status for efficient processing
 struct ChecksumStatus: Codable {
     var checksum1KB: String?
+    var checksum1GB: String?
     var checksum4GB: String?
     var checksum12GB: String?
     var checksum64GB: String?
@@ -13,6 +14,7 @@ struct ChecksumStatus: Codable {
     var checksumFull: String?
     
     var hasComputed1KB: Bool { checksum1KB != nil }
+    var hasComputed1GB: Bool { checksum1GB != nil }
     var hasComputed4GB: Bool { checksum4GB != nil }
     var hasComputed12GB: Bool { checksum12GB != nil }
     var hasComputed64GB: Bool { checksum64GB != nil }
@@ -49,6 +51,7 @@ struct FileInfo: Identifiable, Hashable, Codable {
     
     // Computed properties for checksums (lazy access)
     var checksum1KB: String? { checksumStatus.checksum1KB }
+    var checksum1GB: String? { checksumStatus.checksum1GB }
     var checksum4GB: String? { checksumStatus.checksum4GB }
     var checksum12GB: String? { checksumStatus.checksum12GB }
     var checksum64GB: String? { checksumStatus.checksum64GB }
@@ -175,6 +178,15 @@ struct FileInfo: Identifiable, Hashable, Codable {
             }
         }
         
+        // Compute 1GB checksum
+        if size >= 1 * 1024 * 1024 * 1024 {
+            try fileHandle.seek(toOffset: 0)
+            if let data = try fileHandle.read(upToCount: 1 * 1024 * 1024 * 1024) {
+                checksumStatus.checksum1GB = SHA256.hash(data: data).compactMap { String(format: "%02x", $0) }.joined()
+                print("🔍 [CHKSUM] Computed 1GB checksum for \(displayName)")
+            }
+        }
+        
         // Compute 4GB checksum
         if size >= 4 * 1024 * 1024 * 1024 {
             try fileHandle.seek(toOffset: 0)
@@ -236,6 +248,18 @@ struct FileInfo: Identifiable, Hashable, Codable {
                 print("🔍 [CHKSUM] ✅ Using cached 1KB checksum for \(displayName)")
             }
             return checksumStatus.checksum1KB
+            
+        case 1 * 1024 * 1024 * 1024:
+            if !checksumStatus.hasComputed1GB {
+                print("🔍 [CHKSUM] Computing 1GB checksum for \(displayName) (size: \(formattedSize)) - reading 1,073,741,824 bytes")
+                if let data = try fileHandle.read(upToCount: 1 * 1024 * 1024 * 1024) {
+                    checksumStatus.checksum1GB = SHA256.hash(data: data).compactMap { String(format: "%02x", $0) }.joined()
+                    print("🔍 [CHKSUM] ✅ Computed 1GB checksum for \(displayName) (1,073,741,824 bytes read)")
+                }
+            } else {
+                print("🔍 [CHKSUM] ✅ Using cached 1GB checksum for \(displayName)")
+            }
+            return checksumStatus.checksum1GB
             
         case 4 * 1024 * 1024 * 1024:
             if !checksumStatus.hasComputed4GB {
@@ -458,6 +482,23 @@ struct FileInfo: Identifiable, Hashable, Codable {
             return (false, mutableTargetFile)
         }
         
+        // Compare 1GB checksums if file is large enough
+        if size >= 1 * 1024 * 1024 * 1024 {
+            do {
+                let myChecksum1GB = try await computeChecksumIfNeeded(for: 1 * 1024 * 1024 * 1024)
+                let targetChecksum1GB = try await mutableTargetFile.computeChecksumIfNeeded(for: 1 * 1024 * 1024 * 1024)
+                
+                if myChecksum1GB != targetChecksum1GB {
+                    print("🔍 [COMPARE] ❌ 1GB checksum mismatch: \(displayName) vs \(targetFile.displayName)")
+                    return (false, mutableTargetFile)
+                }
+                print("🔍 [COMPARE] ✅ 1GB checksums match: \(displayName) vs \(targetFile.displayName)")
+            } catch {
+                print("🔍 [COMPARE] ❌ Error computing 1GB checksums: \(error)")
+                return (false, mutableTargetFile)
+            }
+        }
+        
         // Compare 4GB checksums if file is large enough
         if size >= 4 * 1024 * 1024 * 1024 {
             do {
@@ -569,6 +610,23 @@ struct FileInfo: Identifiable, Hashable, Codable {
         } catch {
             print("🔍 [COMPARE] ❌ Error computing 1KB checksums: \(error)")
             return false
+        }
+        
+        // Compare 1GB checksums if file is large enough
+        if size >= 1 * 1024 * 1024 * 1024 {
+            do {
+                let myChecksum1GB = try await computeChecksumIfNeeded(for: 1 * 1024 * 1024 * 1024)
+                let otherChecksum1GB = try await mutableOther.computeChecksumIfNeeded(for: 1 * 1024 * 1024 * 1024)
+                
+                if myChecksum1GB != otherChecksum1GB {
+                    print("🔍 [COMPARE] ❌ 1GB checksum mismatch: \(displayName) vs \(other.displayName)")
+                    return false
+                }
+                print("🔍 [COMPARE] ✅ 1GB checksums match: \(displayName) vs \(other.displayName)")
+            } catch {
+                print("🔍 [COMPARE] ❌ Error computing 1GB checksums: \(error)")
+                return false
+            }
         }
         
         // Compare 4GB checksums if file is large enough
