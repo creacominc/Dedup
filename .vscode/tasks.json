@@ -1,0 +1,114 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Dedup",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-configuration",
+                "Debug",
+                "build"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Clean Build",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-configuration",
+                "Debug",
+                "clean",
+                "build"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Test Dedup",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-configuration",
+                "Debug",
+                "test"
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Prepare Debug App",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "find ~/Library/Developer/Xcode/DerivedData -name 'Dedup.app' -type d 2>/dev/null | head -1 | xargs -I {} cp -R {} ./build/Debug/Dedup.app 2>/dev/null || echo 'App not found in DerivedData'"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        },
+        {
+            "label": "Build and Prepare Debug",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Build Dedup",
+                "Prepare Debug App"
+            ],
+            "group": "build"
+        }
+    ]
+} 

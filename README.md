@@ -237,6 +237,68 @@ xcodebuild -project Dedup.xcodeproj -scheme Dedup -configuration Release archive
 xcodebuild -exportArchive -archivePath build/Dedup.xcarchive -exportPath build/Dedup -exportOptionsPlist exportOptions.plist
 ```
 
+## Changelog
+
+### [Unreleased] - 2025-07-12
+
+#### Added
+- **VSCode/Cursor IDE Integration**: Full development environment setup with build, test, and debug capabilities
+  - Added `.vscode/settings.json` for Swift development configuration
+  - Added `.vscode/tasks.json` with build, test, and clean tasks
+  - Added `.vscode/launch.json` for debugging configuration
+  - Added `Package.swift` for Swift Package Manager support
+  - Added comprehensive documentation in `VSCode_Setup.md`
+
+- **Network Drive Access**: Added entitlements to allow NAS and network drive access
+  - Added `com.apple.security.files.user-selected.read-write` for user-selected folders
+  - Added `com.apple.security.files.downloads.read-write` for Downloads folder access
+  - Added `com.apple.security.files.bookmarks.app-scope` and `document-scope` for persistent access
+  - Added `com.apple.security.network.client` and `network.server` for network operations
+  - Added `com.apple.security.temporary-exception.files.absolute-path.read-write` for `/Volumes/` access
+  - Added `com.apple.security.temporary-exception.files.home-relative-path.read-write` for home directory access
+  - Added comprehensive documentation in `Network_Drive_Access_Setup.md`
+
+#### Fixed
+- **Build System Issues**: Resolved duplicate file conflicts caused by `.build` folder inclusion
+  - Updated `.gitignore` to exclude build artifacts more comprehensively
+  - Updated Xcode project to exclude `.build` folder from File System Synchronized Groups
+  - Fixed deployment target mismatches between main app and test targets (updated to macOS 15.0)
+
+#### Improved
+- **Development Workflow**: Streamlined development process with VSCode/Cursor integration
+  - One-command build and test execution
+  - Integrated debugging with LLDB
+  - Automated app deployment for testing
+  - Comprehensive task automation
+
+- **Documentation**: Enhanced project documentation
+  - Added detailed setup guides for VSCode/Cursor
+  - Added network drive access troubleshooting
+  - Updated build instructions and development workflow
+
+### [Initial Release] - 2025-07-12
+
+#### Features
+- **Smart Media Detection**: Automatic identification of audio, photo, and video files
+- **Quality-Based Deduplication**: Prefers higher quality formats (RAW over JPEG, BRAW over MP4)
+- **Efficient Processing**: Multi-level checksum comparison for fast duplicate detection
+- **Organized Output**: Files automatically organized by media type and creation date
+- **Memory Optimized**: Designed for systems with large amounts of RAM
+- **Progress Tracking**: Real-time progress updates during processing
+- **Batch Operations**: Move multiple files or manage duplicates in batches
+
+#### Supported Formats
+- **Photos**: RAW (CR2, RW2, DNG, ARW, NEF, ORF, RWZ), TIFF, JPEG, PNG, PSD, BMP
+- **Videos**: BRAW, DNG, MOV, MP4, AVI, MKV, WMV, FLV, WebM
+- **Audio**: WAV, FLAC, AAC, M4A, MP3, OGG
+
+#### Technical Features
+- **RAW Support**: Comprehensive RAW image support with multiple viewing options
+- **BRAW Support**: Comprehensive BRAW video support with multiple playback options
+- **SwiftUI Interface**: Modern declarative UI framework
+- **Concurrent Processing**: Async/await for responsive UI during processing
+- **Comprehensive Testing**: Unit tests, UI tests, and performance benchmarks
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
@@ -266,7 +328,11 @@ This application is designed for high-performance systems with:
 
 The application will automatically adapt to available system resources and provide progress feedback during long-running operations.
 
-2025-07-05 
+
+# Change Log
+
+
+## 2025-07-05 
 
   Asking Cursor to re-create this project...
 

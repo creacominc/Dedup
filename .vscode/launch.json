@@ -5,10 +5,33 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Unit Tests",
-            "type": "f5anything",
+            "name": "Debug Dedup",
+            "type": "lldb",
             "request": "launch",
-            "command": "swift test",
+            "program": "${workspaceFolder}/build/Debug/Dedup.app/Contents/MacOS/Dedup",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Build and Prepare Debug",
+            "stopOnEntry": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug Dedup (Direct)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "~/Library/Developer/Xcode/DerivedData/Dedup-dwyurlrejkgpvvdxinipacztiapy/Build/Products/Debug/Dedup.app/Contents/MacOS/Dedup",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Build Dedup",
+            "stopOnEntry": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Attach to Dedup",
+            "type": "lldb",
+            "request": "attach",
+            "program": "~/Library/Developer/Xcode/DerivedData/Dedup-dwyurlrejkgpvvdxinipacztiapy/Build/Products/Debug/Dedup.app/Contents/MacOS/Dedup",
+            "stopOnEntry": false
         }
     ]
 }

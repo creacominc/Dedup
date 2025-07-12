@@ -1,1 +1,29 @@
-{}
+{
+    "files.exclude": {
+        "**/.build": true,
+        "**/DerivedData": true,
+        "**/*.xcodeproj/xcuserdata": true,
+        "**/*.xcworkspace/xcuserdata": true,
+        "**/build": true,
+        "**/node_modules": true
+    },
+    "search.exclude": {
+        "**/.build": true,
+        "**/DerivedData": true,
+        "**/*.xcodeproj/xcuserdata": true,
+        "**/*.xcworkspace/xcuserdata": true,
+        "**/build": true
+    },
+    "swift.buildPath": ".build",
+    "swift.targetBuildPath": ".build/debug",
+    "swift.debuggerPath": "/usr/bin/lldb",
+    "swift.path": "/usr/bin/swift",
+    "swift.swiftPath": "/usr/bin/swift",
+    "swift.swiftPackageManagerPath": "/usr/bin/swift",
+    "swift.xcodePath": "/Applications/Xcode.app/Contents/Developer",
+    "swift.buildConfiguration": "debug",
+    "swift.buildArguments": [
+        "--configuration",
+        "debug"
+    ]
+}
