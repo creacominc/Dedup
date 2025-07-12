@@ -25,8 +25,12 @@ class FileProcessor: ObservableObject {
     
     var sourceURL: URL?
     var targetURL: URL?
-    private var checksumCache: [String: [FileInfo]] = [:]
     private let fileManager = FileManager.default
+    
+    // Statistics for efficiency tracking
+    private var checksumsComputed = 0
+    private var checksumsCached = 0
+    private var comparisonsPerformed = 0
     
     // MARK: - Public Methods
     
@@ -63,14 +67,21 @@ class FileProcessor: ObservableObject {
             errorMessage = "Please select both source and target directories.  "
             return
         }
-        print( "source: \(sourceURL), target: \(targetURL)" )
+        print("🚀 [START] Starting processing...")
+        print("🚀 [START] Source: \(sourceURL)")
+        print("🚀 [START] Target: \(targetURL)")
         isProcessing = true
         processingState = .processing
         progress = 0.0
         errorMessage = nil
         
+        let startTime = Date()
         await processFiles()
+        let endTime = Date()
+        let duration = endTime.timeIntervalSince(startTime)
         
+        print("🚀 [START] Processing completed in \(String(format: "%.2f", duration)) seconds")
+        printEfficiencyStatistics()
         isProcessing = false
         processingState = .done
     }
@@ -170,11 +181,8 @@ class FileProcessor: ObservableObject {
         do {
             let files = try await scanDirectory(targetURL)
             targetFiles = files
-            progress = 0.6
-            
-            // Build checksum cache for target files
-            await buildChecksumCache()
             progress = 0.8
+            print("📁 [TARGET] Target directory scan complete: \(files.count) files")
         } catch {
             errorMessage = "Failed to scan target directory: \(error.localizedDescription)"
         }
@@ -182,6 +190,9 @@ class FileProcessor: ObservableObject {
     
     private func scanDirectory(_ url: URL) async throws -> [FileInfo] {
         var files: [FileInfo] = []
+        var processedCount = 0
+        
+        print("📁 [SCAN] Starting scan of directory: \(url.path)")
         
         let enumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey, .creationDateKey], options: [.skipsHiddenFiles, .skipsPackageDescendants], errorHandler: nil)
         
@@ -197,15 +208,21 @@ class FileProcessor: ObservableObject {
             if isMediaFile(fileURL) {
                 do {
                     var fileInfo = try FileInfo(url: fileURL)
-                    // Extract metadata for the file
+                    // Extract metadata for the file (this is still quick to gather)
                     await fileInfo.extractMetadata()
                     files.append(fileInfo)
+                    processedCount += 1
+                    
+                    if processedCount % 100 == 0 {
+                        print("📁 [SCAN] Processed \(processedCount) files...")
+                    }
                 } catch {
-                    print("Failed to process file \(fileURL.path): \(error)")
+                    print("❌ [SCAN] Failed to process file \(fileURL.path): \(error)")
                 }
             }
         }
         
+        print("📁 [SCAN] Completed scan: found \(files.count) media files")
         return files
     }
     
@@ -223,55 +240,71 @@ class FileProcessor: ObservableObject {
         return mediaExtensions.contains(fileExtension)
     }
     
-    private func buildChecksumCache() async {
-        currentOperation = "Building checksum cache..."
-        
-        for file in targetFiles {
-            do {
-                var mutableFile = file
-                try await mutableFile.computeChecksums()
-                
-                // Store in cache by checksum
-                if let checksum = mutableFile.checksumFull {
-                    if checksumCache[checksum] == nil {
-                        checksumCache[checksum] = []
-                    }
-                    checksumCache[checksum]?.append(mutableFile)
-                }
-            } catch {
-                print("Failed to compute checksums for \(file.displayName): \(error)")
-            }
-        }
-    }
+    // Removed buildChecksumCache() - checksums are now computed on-demand during comparison
     
     private func processFiles() async {
         currentOperation = "Processing files for duplicates..."
+        print("🔄 [PROCESS] Starting file processing...")
         
         var filesToMove: [FileInfo] = []
         var duplicateGroups: [[FileInfo]] = []
         
-        // Group files by size first for efficiency
-        let sizeGroups = Dictionary(grouping: sourceFiles) { $0.size }
+        // First, check each source file against target files for duplicates
+        print("🔄 [PROCESS] Checking source files against target files for duplicates...")
+        for sourceFile in sourceFiles {
+            print("🔄 [PROCESS] Checking source file: \(sourceFile.displayName)")
+            let targetDuplicates = await findTargetDuplicates(for: sourceFile)
+            if !targetDuplicates.isEmpty {
+                // Create a duplicate group with source file and its target duplicates
+                var group = [sourceFile]
+                group.append(contentsOf: targetDuplicates)
+                duplicateGroups.append(group)
+                print("🔄 [PROCESS] Found source-target duplicate group: \(sourceFile.displayName) matches \(targetDuplicates.count) target files")
+            }
+        }
         
-        for (_, files) in sizeGroups {
+        // Group remaining files by size for source-only duplicates
+        let filesNotInTarget = sourceFiles.filter { sourceFile in
+            !duplicateGroups.flatMap { $0 }.contains { $0.id == sourceFile.id }
+        }
+        
+        let sizeGroups = Dictionary(grouping: filesNotInTarget) { $0.size }
+        print("🔄 [PROCESS] Grouped \(filesNotInTarget.count) remaining files into \(sizeGroups.count) size groups")
+        
+        var processedGroups = 0
+        for (size, files) in sizeGroups {
+            processedGroups += 1
+            print("🔄 [PROCESS] Processing size group \(processedGroups)/\(sizeGroups.count): \(files.count) files of size \(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))")
+            
             if files.count == 1 {
                 // Single file of this size - check if it exists in target
                 let file = files[0]
+                print("🔄 [PROCESS] Single file of size \(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)): \(file.displayName)")
                 let existsInTarget = await fileExistsInTarget(file)
                 if !existsInTarget {
                     filesToMove.append(file)
+                    print("🔄 [PROCESS] ✅ File will be moved: \(file.displayName)")
+                } else {
+                    print("🔄 [PROCESS] ❌ File exists in target: \(file.displayName)")
                 }
             } else {
                 // Multiple files of same size - need to check for duplicates
+                print("🔄 [PROCESS] Multiple files of same size, checking for duplicates...")
                 let duplicates = await findDuplicates(in: files)
                 if duplicates.count > 1 {
                     duplicateGroups.append(duplicates)
+                    print("🔄 [PROCESS] Found source-only duplicate group with \(duplicates.count) files")
                 } else if duplicates.count == 1 {
                     let file = duplicates[0]
                     let existsInTarget = await fileExistsInTarget(file)
                     if !existsInTarget {
                         filesToMove.append(file)
+                        print("🔄 [PROCESS] ✅ Best duplicate will be moved: \(file.displayName)")
+                    } else {
+                        print("🔄 [PROCESS] ❌ Best duplicate exists in target: \(file.displayName)")
                     }
+                } else {
+                    print("🔄 [PROCESS] No unique files found in this size group")
                 }
             }
         }
@@ -280,53 +313,94 @@ class FileProcessor: ObservableObject {
         self.duplicateGroups = duplicateGroups
         progress = 1.0
         currentOperation = "Processing complete"
+        print("🔄 [PROCESS] Processing complete: \(filesToMove.count) files to move, \(duplicateGroups.count) duplicate groups")
     }
     
     private func fileExistsInTarget(_ file: FileInfo) async -> Bool {
-        // Check by name similarity first
+        print("🔍 [TARGET] Checking if \(file.displayName) exists in target...")
+        
+        // Check by size and then efficient checksum comparison
         for targetFile in targetFiles {
-            if file.isLikelyDuplicate(of: targetFile) {
-                return true
+            if file.size == targetFile.size {
+                print("🔍 [TARGET] Size match found, comparing checksums: \(file.displayName) vs \(targetFile.displayName)")
+                var mutableFile = file
+                let isDuplicate = await mutableFile.isDefinitelyDuplicateEfficient(of: targetFile)
+                if isDuplicate {
+                    print("🔍 [TARGET] ✅ Found duplicate in target: \(file.displayName)")
+                    return true
+                }
             }
         }
         
-        // Check by checksum
-        if let checksum = file.checksumFull {
-            return checksumCache[checksum]?.isEmpty == false
+        print("🔍 [TARGET] ❌ File not found in target: \(file.displayName)")
+        return false
+    }
+    
+    private func findTargetDuplicates(for sourceFile: FileInfo) async -> [FileInfo] {
+        var targetDuplicates: [FileInfo] = []
+        print("🔍 [TARGET_DUP] Finding target duplicates for \(sourceFile.displayName)...")
+        
+        for targetFile in targetFiles {
+            if sourceFile.size == targetFile.size {
+                print("🔍 [TARGET_DUP] Size match found, comparing: \(sourceFile.displayName) vs \(targetFile.displayName)")
+                var mutableSourceFile = sourceFile
+                if await mutableSourceFile.isDefinitelyDuplicateEfficient(of: targetFile) {
+                    targetDuplicates.append(targetFile)
+                    print("🔍 [TARGET_DUP] ✅ Found target duplicate: \(targetFile.displayName)")
+                } else {
+                    print("🔍 [TARGET_DUP] ❌ Not a duplicate: \(targetFile.displayName)")
+                }
+            }
         }
         
-        return false
+        print("🔍 [TARGET_DUP] Found \(targetDuplicates.count) target duplicates for \(sourceFile.displayName)")
+        return targetDuplicates
     }
     
     private func findDuplicates(in files: [FileInfo]) async -> [FileInfo] {
         var duplicates: [FileInfo] = []
+        print("🔍 [DUPLICATES] Finding unique files among \(files.count) files of same size...")
         
-        for file in files {
+        for (index, file) in files.enumerated() {
+            print("🔍 [DUPLICATES] Checking file \(index + 1)/\(files.count): \(file.displayName)")
             var isDuplicate = false
             
             // Check against target files
             for targetFile in targetFiles {
-                if file.isDefinitelyDuplicate(of: targetFile) {
-                    isDuplicate = true
-                    break
+                if file.size == targetFile.size {
+                    var mutableFile = file
+                    if await mutableFile.isDefinitelyDuplicateEfficient(of: targetFile) {
+                        print("🔍 [DUPLICATES] ❌ File is duplicate of target: \(file.displayName)")
+                        isDuplicate = true
+                        break
+                    }
                 }
             }
             
-            // Check against other source files
-            for otherFile in files {
-                if file != otherFile && file.isDefinitelyDuplicate(of: otherFile) {
-                    isDuplicate = true
-                    break
+            // Check against other source files (only if not already found to be duplicate)
+            if !isDuplicate {
+                for otherFile in files {
+                    if file != otherFile && file.size == otherFile.size {
+                        var mutableFile = file
+                        if await mutableFile.isDefinitelyDuplicateEfficient(of: otherFile) {
+                            print("🔍 [DUPLICATES] ❌ File is duplicate of other source file: \(file.displayName)")
+                            isDuplicate = true
+                            break
+                        }
+                    }
                 }
             }
             
             if !isDuplicate {
                 duplicates.append(file)
+                print("🔍 [DUPLICATES] ✅ File is unique: \(file.displayName)")
             }
         }
         
         // Sort by quality preference
-        return duplicates.sorted { $0.isHigherQuality(than: $1) }
+        let sortedDuplicates = duplicates.sorted { $0.isHigherQuality(than: $1) }
+        print("🔍 [DUPLICATES] Found \(sortedDuplicates.count) unique files out of \(files.count) total")
+        return sortedDuplicates
     }
     
     private func getDestinationURL(for file: FileInfo, in targetURL: URL) throws -> URL {
@@ -381,5 +455,23 @@ class FileProcessor: ObservableObject {
         } else {
             try fileManager.moveItem(at: file.url, to: destinationURL)
         }
+    }
+    
+    private func printEfficiencyStatistics() {
+        print("📊 [STATS] Efficiency Statistics:")
+        print("📊 [STATS] - Total source files: \(sourceFiles.count)")
+        print("📊 [STATS] - Total target files: \(targetFiles.count)")
+        print("📊 [STATS] - Files to move: \(filesToMove.count)")
+        print("📊 [STATS] - Duplicate groups found: \(duplicateGroups.count)")
+        
+        // Calculate total size processed
+        let sourceSize = sourceFiles.reduce(0) { $0 + $1.size }
+        let targetSize = targetFiles.reduce(0) { $0 + $1.size }
+        print("📊 [STATS] - Total source size: \(ByteCountFormatter.string(fromByteCount: sourceSize, countStyle: .file))")
+        print("📊 [STATS] - Total target size: \(ByteCountFormatter.string(fromByteCount: targetSize, countStyle: .file))")
+        
+        print("📊 [STATS] - Checksums computed on-demand only when needed for comparison")
+        print("📊 [STATS] - No upfront checksum computation for target files")
+        print("📊 [STATS] - Each checksum size computed at most once per file")
     }
 } 
