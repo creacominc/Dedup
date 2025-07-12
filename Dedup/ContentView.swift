@@ -73,9 +73,9 @@ struct FileListView: View {
             
             // Tab buttons
             HStack(spacing: 0) {
-                tabButton(title: "Files to Move", index: 0, systemImage: "folder.badge.plus", identifier: "tabButton-filesToMove")
-                tabButton(title: "Duplicates", index: 1, systemImage: "doc.on.doc", identifier: "tabButton-duplicates")
-                tabButton(title: "Settings", index: 2, systemImage: "gear", identifier: "tabButton-settings")
+                tabButton(title: "Files to Move", index: 0, systemImage: "folder.badge.plus", identifier: "tabButton-filesToMove", isEnabled: fileProcessor.processingState == .done)
+                tabButton(title: "Duplicates", index: 1, systemImage: "doc.on.doc", identifier: "tabButton-duplicates", isEnabled: fileProcessor.processingState == .done)
+                tabButton(title: "Settings", index: 2, systemImage: "gear", identifier: "tabButton-settings", isEnabled: true)
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -99,14 +99,22 @@ struct FileListView: View {
                 selectedTab = 0
             }
         }
+        .onChange(of: fileProcessor.processingState) { oldValue, newValue in
+            // Automatically switch to Files to Move tab when processing is done
+            if newValue == .done && selectedTab != 0 {
+                selectedTab = 0
+            }
+        }
     }
     
     // Custom tab button styled as a segmented control
     @ViewBuilder
-    private func tabButton(title: String, index: Int, systemImage: String, identifier: String) -> some View {
+    private func tabButton(title: String, index: Int, systemImage: String, identifier: String, isEnabled: Bool) -> some View {
         Button(action: { 
-            selectedTab = index
-            selectedFile = nil // Clear selection when switching tabs
+            if isEnabled {
+                selectedTab = index
+                selectedFile = nil // Clear selection when switching tabs
+            }
         }) {
             HStack(spacing: 6) {
                 Image(systemName: systemImage)
@@ -116,13 +124,14 @@ struct FileListView: View {
             .padding(.horizontal, 20)
             .frame(maxWidth: .infinity)
             .background(selectedTab == index ? Color.accentColor.opacity(0.15) : Color.clear)
-            .foregroundColor(selectedTab == index ? Color.accentColor : Color.primary)
+            .foregroundColor(selectedTab == index ? Color.accentColor : (isEnabled ? Color.primary : Color.secondary))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(selectedTab == index ? Color.accentColor : Color.gray.opacity(0.3), lineWidth: selectedTab == index ? 2 : 1)
             )
         }
         .buttonStyle(PlainButtonStyle())
+        .disabled(!isEnabled)
         .accessibilityIdentifier(identifier)
     }
 }
@@ -1221,13 +1230,6 @@ struct SettingsView: View {
     @ObservedObject var fileProcessor: FileProcessor
     @Binding var selectedTab: Int
     
-    enum ProcessingState {
-        case initial, ready, processing, done
-    }
-    @State private var state: ProcessingState = .initial
-    @State private var lastSourceURL: URL?
-    @State private var lastTargetURL: URL?
-    
     var body: some View {
         VStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 12) {
@@ -1278,7 +1280,6 @@ struct SettingsView: View {
                     .font(.headline)
                     .accessibilityIdentifier(statusIdentifier)
                 Button(buttonLabel) {
-                    state = .processing
                     Task {
                         await fileProcessor.startProcessing()
                     }
@@ -1287,7 +1288,7 @@ struct SettingsView: View {
                 .disabled(!buttonEnabled)
                 .accessibilityIdentifier(buttonIdentifier)
             }
-            if state == .processing {
+            if fileProcessor.processingState == .processing {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Processing files...")
                         .font(.subheadline)
@@ -1303,45 +1304,10 @@ struct SettingsView: View {
             Spacer()
         }
         .padding()
-        .onAppear {
-            updateState()
-        }
-        .onChange(of: fileProcessor.isProcessing) { oldValue, newValue in
-            if newValue {
-                state = .processing
-            } else if oldValue && !newValue {
-                state = .done
-            }
-        }
-        .onChange(of: fileProcessor.sourceURL) { oldValue, newValue in
-            if oldValue != newValue {
-                lastSourceURL = newValue
-                updateState()
-            }
-        }
-        .onChange(of: fileProcessor.targetURL) { oldValue, newValue in
-            if oldValue != newValue {
-                lastTargetURL = newValue
-                updateState()
-            }
-        }
-    }
-    
-    private func updateState() {
-        if fileProcessor.sourceURL == nil || fileProcessor.targetURL == nil {
-            state = .initial
-        } else if state == .done {
-            // If either folder changed after done, go back to ready
-            if lastSourceURL != fileProcessor.sourceURL || lastTargetURL != fileProcessor.targetURL {
-                state = .ready
-            }
-        } else {
-            state = .ready
-        }
     }
     
     private var statusText: String {
-        switch state {
+        switch fileProcessor.processingState {
         case .initial: return "Select Folders"
         case .ready: return "Ready to Process"
         case .processing: return "Processing"
@@ -1349,7 +1315,7 @@ struct SettingsView: View {
         }
     }
     private var statusIdentifier: String {
-        switch state {
+        switch fileProcessor.processingState {
         case .initial: return "label-selectFolders"
         case .ready: return "label-readyToProcess"
         case .processing: return "label-processing"
@@ -1357,19 +1323,19 @@ struct SettingsView: View {
         }
     }
     private var buttonLabel: String {
-        switch state {
+        switch fileProcessor.processingState {
         case .processing, .done: return "Processing..."
         default: return "Start Processing"
         }
     }
     private var buttonIdentifier: String {
-        switch state {
+        switch fileProcessor.processingState {
         case .processing, .done: return "button-processing"
         default: return "button-startProcessing"
         }
     }
     private var buttonEnabled: Bool {
-        state == .ready
+        fileProcessor.processingState == .ready
     }
 }
 

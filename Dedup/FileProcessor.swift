@@ -2,6 +2,14 @@ import Foundation
 import CryptoKit
 import AppKit
 
+/// Processing state for the application
+enum ProcessingState {
+    case initial
+    case ready
+    case processing
+    case done
+}
+
 /// Main processor for handling file deduplication and organization
 @MainActor
 class FileProcessor: ObservableObject {
@@ -13,6 +21,7 @@ class FileProcessor: ObservableObject {
     @Published var progress: Double = 0.0
     @Published var currentOperation = ""
     @Published var errorMessage: String?
+    @Published var processingState: ProcessingState = .initial
     
     var sourceURL: URL?
     var targetURL: URL?
@@ -31,6 +40,7 @@ class FileProcessor: ObservableObject {
         if panel.runModal() == .OK, let url = panel.url {
             sourceURL = url
             await scanSourceDirectory()
+            updateProcessingState()
         }
     }
     
@@ -44,6 +54,7 @@ class FileProcessor: ObservableObject {
         if panel.runModal() == .OK, let url = panel.url {
             targetURL = url
             await scanTargetDirectory()
+            updateProcessingState()
         }
     }
     
@@ -54,18 +65,21 @@ class FileProcessor: ObservableObject {
         }
         print( "source: \(sourceURL), target: \(targetURL)" )
         isProcessing = true
+        processingState = .processing
         progress = 0.0
         errorMessage = nil
         
         await processFiles()
         
         isProcessing = false
+        processingState = .done
     }
     
     func moveSelectedFiles(_ selectedFiles: [FileInfo]) async {
         guard !selectedFiles.isEmpty else { return }
         
         isProcessing = true
+        processingState = .processing
         currentOperation = "Moving selected files..."
         progress = 0.0
         
@@ -91,16 +105,22 @@ class FileProcessor: ObservableObject {
         }
         
         isProcessing = false
+        processingState = .done
         currentOperation = ""
         progress = 0.0
     }
     
     func deleteSelectedDuplicates(_ duplicates: [FileInfo]) async {
+        isProcessing = true
+        processingState = .processing
+        
         for file in duplicates {
             do {
                 try fileManager.removeItem(at: file.url)
             } catch {
                 errorMessage = "Failed to delete \(file.displayName): \(error.localizedDescription)"
+                isProcessing = false
+                processingState = .ready
                 return
             }
         }
@@ -108,9 +128,23 @@ class FileProcessor: ObservableObject {
         // Refresh the lists after deleting files
         await scanSourceDirectory()
         await scanTargetDirectory()
+        
+        isProcessing = false
+        processingState = .done
     }
     
     // MARK: - Private Methods
+    
+    private func updateProcessingState() {
+        if sourceURL == nil || targetURL == nil {
+            processingState = .initial
+        } else if processingState == .done {
+            // If we're done but directories changed, go back to ready
+            processingState = .ready
+        } else if processingState == .initial {
+            processingState = .ready
+        }
+    }
     
     private func scanSourceDirectory() async {
         guard let sourceURL = sourceURL else { return }
