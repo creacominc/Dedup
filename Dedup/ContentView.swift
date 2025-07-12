@@ -52,7 +52,7 @@ struct ContentView: View {
 struct FileListView: View {
     @ObservedObject var fileProcessor: FileProcessor
     @Binding var selectedFile: FileInfo?
-    @State private var selectedTab = 0
+    @State private var selectedTab = 2 // Default to Settings tab
     
     var body: some View {
         VStack(spacing: 0) {
@@ -1221,6 +1221,13 @@ struct SettingsView: View {
     @ObservedObject var fileProcessor: FileProcessor
     @Binding var selectedTab: Int
     
+    enum ProcessingState {
+        case initial, ready, processing, done
+    }
+    @State private var state: ProcessingState = .initial
+    @State private var lastSourceURL: URL?
+    @State private var lastTargetURL: URL?
+    
     var body: some View {
         VStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 12) {
@@ -1264,57 +1271,105 @@ struct SettingsView: View {
                     .accessibilityIdentifier("button-selectTarget")
                 }
             }
-            
-            // Show Start Processing button when both directories are selected but not processing
-            if fileProcessor.sourceURL != nil && fileProcessor.targetURL != nil && !fileProcessor.isProcessing {
-                Divider()
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Ready to Process")
-                        .font(.headline)
-                        .accessibilityIdentifier("label-readyToProcess")
-                    
-                    Button("Start Processing") {
-                        Task {
-                            await fileProcessor.startProcessing()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("button-startProcessing")
-                }
-            }
-            
-            // Show Processing button when processing is active
-            if fileProcessor.isProcessing {
-                Divider()
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Processing")
-                        .font(.headline)
-                        .accessibilityIdentifier("label-processingHeader")
-                    
-                    Button("Processing...") {
-                        // Button is disabled during processing
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(true)
-                    .accessibilityIdentifier("button-processing")
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Processing files...")
-                            .font(.subheadline)
-                            .accessibilityIdentifier("label-processingStatus")
-                        ProgressView(value: fileProcessor.progress)
-                            .progressViewStyle(LinearProgressViewStyle())
-                        Text(fileProcessor.currentOperation)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .accessibilityIdentifier("label-processingOperation")
+            Divider()
+            // Always show status and button
+            VStack(alignment: .leading, spacing: 12) {
+                Text(statusText)
+                    .font(.headline)
+                    .accessibilityIdentifier(statusIdentifier)
+                Button(buttonLabel) {
+                    state = .processing
+                    Task {
+                        await fileProcessor.startProcessing()
                     }
                 }
+                .buttonStyle(.borderedProminent)
+                .disabled(!buttonEnabled)
+                .accessibilityIdentifier(buttonIdentifier)
             }
-            
+            if state == .processing {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Processing files...")
+                        .font(.subheadline)
+                        .accessibilityIdentifier("label-processingStatus")
+                    ProgressView(value: fileProcessor.progress)
+                        .progressViewStyle(LinearProgressViewStyle())
+                    Text(fileProcessor.currentOperation)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .accessibilityIdentifier("label-processingOperation")
+                }
+            }
             Spacer()
         }
         .padding()
+        .onAppear {
+            updateState()
+        }
+        .onChange(of: fileProcessor.isProcessing) { oldValue, newValue in
+            if newValue {
+                state = .processing
+            } else if oldValue && !newValue {
+                state = .done
+            }
+        }
+        .onChange(of: fileProcessor.sourceURL) { oldValue, newValue in
+            if oldValue != newValue {
+                lastSourceURL = newValue
+                updateState()
+            }
+        }
+        .onChange(of: fileProcessor.targetURL) { oldValue, newValue in
+            if oldValue != newValue {
+                lastTargetURL = newValue
+                updateState()
+            }
+        }
+    }
+    
+    private func updateState() {
+        if fileProcessor.sourceURL == nil || fileProcessor.targetURL == nil {
+            state = .initial
+        } else if state == .done {
+            // If either folder changed after done, go back to ready
+            if lastSourceURL != fileProcessor.sourceURL || lastTargetURL != fileProcessor.targetURL {
+                state = .ready
+            }
+        } else {
+            state = .ready
+        }
+    }
+    
+    private var statusText: String {
+        switch state {
+        case .initial: return "Select Folders"
+        case .ready: return "Ready to Process"
+        case .processing: return "Processing"
+        case .done: return "Done Processing"
+        }
+    }
+    private var statusIdentifier: String {
+        switch state {
+        case .initial: return "label-selectFolders"
+        case .ready: return "label-readyToProcess"
+        case .processing: return "label-processing"
+        case .done: return "label-doneProcessing"
+        }
+    }
+    private var buttonLabel: String {
+        switch state {
+        case .processing, .done: return "Processing..."
+        default: return "Start Processing"
+        }
+    }
+    private var buttonIdentifier: String {
+        switch state {
+        case .processing, .done: return "button-processing"
+        default: return "button-startProcessing"
+        }
+    }
+    private var buttonEnabled: Bool {
+        state == .ready
     }
 }
 
