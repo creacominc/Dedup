@@ -331,6 +331,18 @@ The application will automatically adapt to available system resources and provi
 
 # Change Log
 
+## 2025-07-12 Improving the checksum caching workflow
+
+i think the logic for the checksum calculation is not efficient.  for efficiency we should only checksum as much of a file as is needed to verify that it is different than another file.  
+
+as such, we should build a cache of the fileInfo with as little information as needed initially.  that is, only with information that can be quickly gathered.  in the end there will be a very large number of files and we will be reading terabytes of information so we need to minimize the data reads and the memory usage.
+
+I think that the target and source folders should be initially used to generate caches of the file information with only the name, path, file size, creation and modification dates, media type, file extension, and whatever else can be collected quickly.  Only start adding checksums to the cache when the files are being compared. 
+
+For each file that is found in the source folder list (which can be the cache), compare it using the logic that is already in place.  the last comparison should be the checksums.  that is, if the files appear to be duplicates, start comparing the checksums.  if they are not, there is no need for further checksums.  when doing the checksum comparison process, start by computing the first checksum size if it has not already been computed.  if it has, simply compare the checksums.  in other words, only ever checksum a file once for each size and only when it is being compared with another file that has already matched all the other criteria and smaller checksums.
+
+Please provide logging for the process so that we can diagnose and verify the efficiency.  i want to be certain that files are not checksumed beyond the number of bytes needed to verify the difference and that no file/size is checksummed more than once.
+
 
 ## 2025-07-05 
 

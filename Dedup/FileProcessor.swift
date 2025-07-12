@@ -255,9 +255,9 @@ class FileProcessor: ObservableObject {
             print("🔄 [PROCESS] Checking source file: \(sourceFile.displayName)")
             let targetDuplicates = await findTargetDuplicates(for: sourceFile)
             if !targetDuplicates.isEmpty {
-                // Create a duplicate group with source file and its target duplicates
-                var group = [sourceFile]
-                group.append(contentsOf: targetDuplicates)
+                // Create a duplicate group with only the source file
+                // Target duplicates will be shown in the view when source file is selected
+                let group = [sourceFile]
                 duplicateGroups.append(group)
                 print("🔄 [PROCESS] Found source-target duplicate group: \(sourceFile.displayName) matches \(targetDuplicates.count) target files")
             }
@@ -334,6 +334,20 @@ class FileProcessor: ObservableObject {
         
         print("🔍 [TARGET] ❌ File not found in target: \(file.displayName)")
         return false
+    }
+    
+    func findTargetDuplicates(for sourceFile: FileInfo) -> [FileInfo] {
+        // Synchronous version for UI display
+        // Return target files that match this source file
+        var matches: [FileInfo] = []
+        for targetFile in targetFiles {
+            let nameMatch = targetFile.displayName == sourceFile.displayName
+            let sizeMatch = targetFile.size == sourceFile.size
+            if nameMatch && sizeMatch {
+                matches.append(targetFile)
+            }
+        }
+        return matches
     }
     
     private func findTargetDuplicates(for sourceFile: FileInfo) async -> [FileInfo] {

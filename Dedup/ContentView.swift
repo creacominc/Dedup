@@ -5,16 +5,22 @@ import AppKit
 struct ContentView: View {
     @StateObject private var fileProcessor = FileProcessor()
     @State private var selectedFile: FileInfo?
+    @State private var selectedTab = 2 // Default to Settings tab
     
     var body: some View {
         NavigationView {
             // Sidebar with file list
-            FileListView(fileProcessor: fileProcessor, selectedFile: $selectedFile)
+            FileListView(fileProcessor: fileProcessor, selectedFile: $selectedFile, selectedTab: $selectedTab)
                 .frame(minWidth: 300, idealWidth: 350)
             
             // Detail view for selected file
             if let selectedFile = selectedFile {
-                FileDetailView(file: selectedFile)
+                if selectedTab == 1 { // Duplicates tab
+                    let targetDuplicates = fileProcessor.findTargetDuplicates(for: selectedFile)
+                    DuplicateDetailView(sourceFile: selectedFile, targetFiles: targetDuplicates)
+                } else {
+                    FileDetailView(file: selectedFile)
+                }
             } else {
                 // Placeholder when no file is selected
                 VStack(spacing: 20) {
@@ -52,7 +58,7 @@ struct ContentView: View {
 struct FileListView: View {
     @ObservedObject var fileProcessor: FileProcessor
     @Binding var selectedFile: FileInfo?
-    @State private var selectedTab = 2 // Default to Settings tab
+    @Binding var selectedTab: Int
     
     var body: some View {
         VStack(spacing: 0) {
@@ -256,21 +262,20 @@ struct DuplicatesListView: View {
             } else {
                 List {
                     ForEach(Array(fileProcessor.duplicateGroups.enumerated()), id: \.offset) { index, group in
-                        Section(header: Text("Group \(index + 1) (\(group.count) files)")) {
-                            ForEach(group, id: \.id) { file in
-                                DuplicateFileRowView(file: file, group: group)
-                                    .onTapGesture {
-                                        selectedFile = file
+                        // Remove the Section header, just show the files
+                        ForEach(group, id: \.id) { file in
+                            DuplicateFileRowView(file: file, group: group, fileProcessor: fileProcessor)
+                                .onTapGesture {
+                                    selectedFile = file
+                                }
+                                .background(selectedDuplicates.contains(file) ? Color.accentColor.opacity(0.2) : Color.clear)
+                                .onTapGesture {
+                                    if selectedDuplicates.contains(file) {
+                                        selectedDuplicates.remove(file)
+                                    } else {
+                                        selectedDuplicates.insert(file)
                                     }
-                                    .background(selectedDuplicates.contains(file) ? Color.accentColor.opacity(0.2) : Color.clear)
-                                    .onTapGesture {
-                                        if selectedDuplicates.contains(file) {
-                                            selectedDuplicates.remove(file)
-                                        } else {
-                                            selectedDuplicates.insert(file)
-                                        }
-                                    }
-                            }
+                                }
                         }
                     }
                 }
@@ -1106,6 +1111,11 @@ struct FileRowView: View {
 struct DuplicateFileRowView: View {
     let file: FileInfo
     let group: [FileInfo]
+    @ObservedObject var fileProcessor: FileProcessor
+    
+    private var targetDuplicates: [FileInfo] {
+        fileProcessor.findTargetDuplicates(for: file)
+    }
     
     var body: some View {
         HStack(spacing: 12) {
@@ -1142,22 +1152,18 @@ struct DuplicateFileRowView: View {
                         .foregroundColor(.secondary)
                 }
                 
-                // Show duplicate count and locations
-                if group.count > 1 {
-                    Text("Duplicate of \(group.count - 1) other file(s)")
+                if !targetDuplicates.isEmpty {
+                    Text("Duplicate of \(targetDuplicates.count) target file(s)")
                         .font(.caption)
                         .foregroundColor(.orange)
                         .padding(.top, 2)
-                    
-                    // Show list of duplicate paths
                     VStack(alignment: .leading, spacing: 2) {
-                        ForEach(group.filter { $0.id != file.id }, id: \.id) { duplicateFile in
+                        ForEach(targetDuplicates, id: \.id) { targetFile in
                             HStack(spacing: 4) {
                                 Image(systemName: "arrow.right")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
-                                
-                                Text(duplicateFile.url.path)
+                                Text(targetFile.url.path)
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
@@ -1167,12 +1173,21 @@ struct DuplicateFileRowView: View {
                     }
                     .padding(.top, 4)
                     .padding(.leading, 8)
+                } else if group.count > 1 {
+                    Text("Duplicate of \(group.count - 1) other file(s)")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .padding(.top, 2)
+                } else {
+                    Text("Single file in group")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 2)
                 }
             }
             
             Spacer()
             
-            // Show in Finder button
             Button(action: {
                 NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
             }) {
@@ -1223,6 +1238,32 @@ struct DuplicateFileRowView: View {
         case .unsupported:
             return .orange
         }
+    }
+}
+
+// New: Show source and target images side by side
+struct DuplicateDetailView: View {
+    let sourceFile: FileInfo
+    let targetFiles: [FileInfo]
+    
+    var body: some View {
+        HStack(spacing: 24) {
+            VStack {
+                Text("Source")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                FileDetailView(file: sourceFile)
+            }
+            ForEach(targetFiles, id: \.id) { targetFile in
+                VStack {
+                    Text("Target")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    FileDetailView(file: targetFile)
+                }
+            }
+        }
+        .padding()
     }
 }
 
