@@ -183,18 +183,18 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1640;
-				LastUpgradeCheck = 1640;
+				LastSwiftUpdateCheck = 1700;
+				LastUpgradeCheck = 1700;
 				TargetAttributes = {
 					36AD7C2E2E1A0A85000C222A = {
-						CreatedOnToolsVersion = 16.4;
+						CreatedOnToolsVersion = 17.0;
 					};
 					36AD7C3E2E1A0A87000C222A = {
-						CreatedOnToolsVersion = 16.4;
+						CreatedOnToolsVersion = 17.0;
 						TestTargetID = 36AD7C2E2E1A0A85000C222A;
 					};
 					36AD7C482E1A0A87000C222A = {
-						CreatedOnToolsVersion = 16.4;
+						CreatedOnToolsVersion = 17.0;
 						TestTargetID = 36AD7C2E2E1A0A85000C222A;
 					};
 				};
@@ -336,7 +336,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -394,7 +394,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -428,7 +428,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 5.10;
 			};
 			name = Debug;
 		};
@@ -461,7 +461,7 @@
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 5.10;
 			};
 			name = Release;
 		};
@@ -478,7 +478,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = ca.creacom.dedup.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 5.10;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dedup.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Dedup";
 			};
 			name = Debug;
@@ -496,7 +496,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.creacom.dedup.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 5.10;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dedup.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Dedup";
 			};
 			name = Release;
@@ -513,7 +513,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = ca.creacom.dedup.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 5.10;
 				TEST_TARGET_NAME = Dedup;
 			};
 			name = Debug;
@@ -530,7 +530,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.creacom.dedup.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 5.10;
 				TEST_TARGET_NAME = Dedup;
 			};
 			name = Release;

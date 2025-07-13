@@ -340,6 +340,14 @@ struct FileInfo: Identifiable, Hashable, Codable {
     }
     
     private mutating func extractVideoMetadata() async {
+        // For MKV files or when AVFoundation fails, try FFmpeg first
+        if fileExtension.lowercased() == "mkv" {
+            if await extractVideoMetadataWithFFmpeg() {
+                return
+            }
+        }
+        
+        // Fallback to AVFoundation
         let asset = AVURLAsset(url: url)
         do {
             let videoTracks = try await asset.loadTracks(withMediaType: .video)
@@ -374,8 +382,144 @@ struct FileInfo: Identifiable, Hashable, Codable {
             let duration = try await asset.load(.duration)
             self.duration = duration.seconds
         } catch {
-            print("Failed to extract video metadata: \(error)")
+            print("Failed to extract video metadata with AVFoundation: \(error)")
+            // If AVFoundation fails, try FFmpeg as fallback
+            if await extractVideoMetadataWithFFmpeg() {
+                return
+            }
         }
+    }
+    
+    private mutating func extractVideoMetadataWithFFmpeg() async -> Bool {
+        let ffmpegPath = "/usr/local/bin/ffmpeg"
+        let systemFFmpegPath = "/opt/homebrew/bin/ffmpeg"
+        
+        let ffmpeg = FileManager.default.fileExists(atPath: ffmpegPath) ? ffmpegPath :
+                     FileManager.default.fileExists(atPath: systemFFmpegPath) ? systemFFmpegPath : nil
+        
+        guard let ffmpegExecutable = ffmpeg else {
+            print("FFmpeg not found for metadata extraction")
+            return false
+        }
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ffmpegExecutable)
+        process.arguments = [
+            "-i", url.path,
+            "-f", "null",
+            "-"
+        ]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8) ?? ""
+            
+            return parseVideoMetadataFromFFmpeg(output)
+        } catch {
+            print("Failed to run FFmpeg for metadata extraction: \(error)")
+            return false
+        }
+    }
+    
+    private mutating func parseVideoMetadataFromFFmpeg(_ output: String) -> Bool {
+        let lines = output.components(separatedBy: .newlines)
+        
+        for line in lines {
+            // Extract video resolution
+            if line.contains("Video:") {
+                if let resolutionMatch = line.range(of: #"(\d{2,4})x(\d{2,4})"#, options: .regularExpression) {
+                    let resolutionString = String(line[resolutionMatch])
+                    let components = resolutionString.components(separatedBy: "x")
+                    if components.count == 2,
+                       let width = Int(components[0]),
+                       let height = Int(components[1]) {
+                        self.width = width
+                        self.height = height
+                    }
+                }
+                
+                // Extract frame rate
+                if let frameRateMatch = line.range(of: #"(\d+(?:\.\d+)?)\s*fps"#, options: .regularExpression) {
+                    let frameRateString = String(line[frameRateMatch])
+                    if let fps = frameRateString.components(separatedBy: " ").first,
+                       let frameRate = Double(fps) {
+                        self.frameRate = frameRate
+                    }
+                }
+                
+                // Extract video codec
+                if let codecMatch = line.range(of: #"Video:\s+([^,\s]+)"#, options: .regularExpression) {
+                    let codecString = String(line[codecMatch])
+                    if let codecName = codecString.components(separatedBy: ":").last?.trimmingCharacters(in: .whitespaces) {
+                        self.codec = codecName
+                    }
+                }
+                
+                // Extract bit rate
+                if let bitRateMatch = line.range(of: #"(\d+)\s*kb/s"#, options: .regularExpression) {
+                    let bitRateString = String(line[bitRateMatch])
+                    if let bitRate = bitRateString.components(separatedBy: " ").first,
+                       let bitRateInt = Int(bitRate) {
+                        self.bitRate = bitRateInt * 1000 // Convert to bits per second
+                    }
+                }
+            }
+            
+            // Extract audio information
+            if line.contains("Audio:") {
+                // Extract audio codec
+                if let audioCodecMatch = line.range(of: #"Audio:\s+([^,\s]+)"#, options: .regularExpression) {
+                    let audioCodecString = String(line[audioCodecMatch])
+                    if let audioCodecName = audioCodecString.components(separatedBy: ":").last?.trimmingCharacters(in: .whitespaces) {
+                        self.audioCodec = audioCodecName
+                    }
+                }
+                
+                // Extract audio channels
+                if let channelsMatch = line.range(of: #"(\d+)\s*ch"#, options: .regularExpression) {
+                    let channelsString = String(line[channelsMatch])
+                    if let channels = channelsString.components(separatedBy: " ").first,
+                       let channelsInt = Int(channels) {
+                        self.audioChannels = channelsInt
+                    }
+                }
+                
+                // Extract audio sample rate
+                if let sampleRateMatch = line.range(of: #"(\d+)\s*Hz"#, options: .regularExpression) {
+                    let sampleRateString = String(line[sampleRateMatch])
+                    if let sampleRate = sampleRateString.components(separatedBy: " ").first,
+                       let sampleRateDouble = Double(sampleRate) {
+                        self.audioSampleRate = sampleRateDouble
+                    }
+                }
+            }
+            
+            // Extract duration
+            if line.contains("Duration:") {
+                if let durationMatch = line.range(of: #"Duration:\s+(\d{2}):(\d{2}):(\d{2})\.(\d{2})"#, options: .regularExpression) {
+                    let durationString = String(line[durationMatch])
+                    let components = durationString.components(separatedBy: ":")
+                    if components.count >= 4,
+                       let hours = Double(components[0]),
+                       let minutes = Double(components[1]),
+                       let seconds = Double(components[2]),
+                       let centiseconds = Double(components[3]) {
+                        let totalSeconds = hours * 3600 + minutes * 60 + seconds + centiseconds / 100
+                        self.duration = totalSeconds
+                    }
+                }
+            }
+        }
+        
+        // Return true if we successfully extracted at least some metadata
+        return width != nil || height != nil || duration != nil || codec != nil
     }
     
     private mutating func extractPhotoMetadata() {
@@ -410,6 +554,15 @@ struct FileInfo: Identifiable, Hashable, Codable {
     }
     
     private mutating func extractAudioMetadata() async {
+        // For problematic audio formats, try FFmpeg first
+        let problematicAudioFormats = ["ogg", "flac", "wma"]
+        if problematicAudioFormats.contains(fileExtension.lowercased()) {
+            if await extractAudioMetadataWithFFmpeg() {
+                return
+            }
+        }
+        
+        // Fallback to AVFoundation
         let asset = AVURLAsset(url: url)
         do {
             let audioTracks = try await asset.loadTracks(withMediaType: .audio)
@@ -429,8 +582,113 @@ struct FileInfo: Identifiable, Hashable, Codable {
             let duration = try await asset.load(.duration)
             self.duration = duration.seconds
         } catch {
-            print("Failed to extract audio metadata: \(error)")
+            print("Failed to extract audio metadata with AVFoundation: \(error)")
+            // If AVFoundation fails, try FFmpeg as fallback
+            if await extractAudioMetadataWithFFmpeg() {
+                return
+            }
         }
+    }
+    
+    private mutating func extractAudioMetadataWithFFmpeg() async -> Bool {
+        let ffmpegPath = "/usr/local/bin/ffmpeg"
+        let systemFFmpegPath = "/opt/homebrew/bin/ffmpeg"
+        
+        let ffmpeg = FileManager.default.fileExists(atPath: ffmpegPath) ? ffmpegPath :
+                     FileManager.default.fileExists(atPath: systemFFmpegPath) ? systemFFmpegPath : nil
+        
+        guard let ffmpegExecutable = ffmpeg else {
+            print("FFmpeg not found for audio metadata extraction")
+            return false
+        }
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ffmpegExecutable)
+        process.arguments = [
+            "-i", url.path,
+            "-f", "null",
+            "-"
+        ]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8) ?? ""
+            
+            return parseAudioMetadataFromFFmpeg(output)
+        } catch {
+            print("Failed to run FFmpeg for audio metadata extraction: \(error)")
+            return false
+        }
+    }
+    
+    private mutating func parseAudioMetadataFromFFmpeg(_ output: String) -> Bool {
+        let lines = output.components(separatedBy: .newlines)
+        
+        for line in lines {
+            // Extract audio information
+            if line.contains("Audio:") {
+                // Extract audio codec
+                if let audioCodecMatch = line.range(of: #"Audio:\s+([^,\s]+)"#, options: .regularExpression) {
+                    let audioCodecString = String(line[audioCodecMatch])
+                    if let audioCodecName = audioCodecString.components(separatedBy: ":").last?.trimmingCharacters(in: .whitespaces) {
+                        self.audioCodec = audioCodecName
+                    }
+                }
+                
+                // Extract audio channels
+                if let channelsMatch = line.range(of: #"(\d+)\s*ch"#, options: .regularExpression) {
+                    let channelsString = String(line[channelsMatch])
+                    if let channels = channelsString.components(separatedBy: " ").first,
+                       let channelsInt = Int(channels) {
+                        self.audioChannels = channelsInt
+                    }
+                }
+                
+                // Extract audio sample rate
+                if let sampleRateMatch = line.range(of: #"(\d+)\s*Hz"#, options: .regularExpression) {
+                    let sampleRateString = String(line[sampleRateMatch])
+                    if let sampleRate = sampleRateString.components(separatedBy: " ").first,
+                       let sampleRateDouble = Double(sampleRate) {
+                        self.audioSampleRate = sampleRateDouble
+                    }
+                }
+                
+                // Extract bit rate
+                if let bitRateMatch = line.range(of: #"(\d+)\s*kb/s"#, options: .regularExpression) {
+                    let bitRateString = String(line[bitRateMatch])
+                    if let bitRate = bitRateString.components(separatedBy: " ").first,
+                       let bitRateInt = Int(bitRate) {
+                        self.bitRate = bitRateInt * 1000 // Convert to bits per second
+                    }
+                }
+            }
+            
+            // Extract duration
+            if line.contains("Duration:") {
+                if let durationMatch = line.range(of: #"Duration:\s+(\d{2}):(\d{2}):(\d{2})\.(\d{2})"#, options: .regularExpression) {
+                    let durationString = String(line[durationMatch])
+                    let components = durationString.components(separatedBy: ":")
+                    if components.count >= 4,
+                       let hours = Double(components[0]),
+                       let minutes = Double(components[1]),
+                       let seconds = Double(components[2]),
+                       let centiseconds = Double(components[3]) {
+                        let totalSeconds = hours * 3600 + minutes * 60 + seconds + centiseconds / 100
+                        self.duration = totalSeconds
+                    }
+                }
+            }
+        }
+        
+        // Return true if we successfully extracted at least some metadata
+        return duration != nil || audioCodec != nil || audioChannels != nil || audioSampleRate != nil
     }
     
     // MARK: - Duplicate Detection

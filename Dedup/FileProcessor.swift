@@ -29,6 +29,7 @@ class FileProcessor: ObservableObject {
     @Published var currentOperation = ""
     @Published var errorMessage: String?
     @Published var processingState: ProcessingState = .initial
+    @Published var scanProgress: Double? = nil
     
     var sourceURL: URL?
     var targetURL: URL?
@@ -167,40 +168,105 @@ class FileProcessor: ObservableObject {
     private func scanSourceDirectory() async {
         guard let sourceURL = sourceURL else { return }
         
-        currentOperation = "Scanning source directory..."
+        await MainActor.run {
+            self.processingState = .processing
+            self.currentOperation = "Scanning..."
+            self.scanProgress = 0.0
+        }
         progress = 0.0
-        
+        var totalFiles: Int = 1 // Avoid division by zero
         do {
-            let files = try await scanDirectory(sourceURL)
+            let files = try await scanDirectory(sourceURL) { processedCount, message in
+                if processedCount == 1 {
+                    if let match = message.range(of: #"of (\d+) files"#, options: .regularExpression) {
+                        let str = String(message[match]).components(separatedBy: " ")[1]
+                        totalFiles = Int(str) ?? 1
+                    }
+                }
+                await MainActor.run {
+                    self.currentOperation = message
+                    let scanProgressValue = totalFiles > 0 ? Double(processedCount) / Double(totalFiles) : 0
+                    self.scanProgress = min(max(scanProgressValue, 0.0), 1.0)
+                }
+            }
             sourceFiles = files
             progress = 0.3
+            await MainActor.run {
+                self.scanProgress = nil
+                self.processingState = .done
+            }
         } catch {
             errorMessage = "Failed to scan source directory: \(error.localizedDescription)"
+            await MainActor.run {
+                self.scanProgress = nil
+                self.processingState = .done
+            }
         }
     }
     
     private func scanTargetDirectory() async {
         guard let targetURL = targetURL else { return }
         
-        currentOperation = "Scanning target directory..."
+        await MainActor.run {
+            self.processingState = .processing
+            self.currentOperation = "Scanning..."
+            self.scanProgress = 0.0
+        }
         progress = 0.3
-        
+        var totalFiles: Int = 1 // Avoid division by zero
         do {
-            let files = try await scanDirectory(targetURL)
+            let files = try await scanDirectory(targetURL) { processedCount, message in
+                if processedCount == 1 {
+                    if let match = message.range(of: #"of (\d+) files"#, options: .regularExpression) {
+                        let str = String(message[match]).components(separatedBy: " ")[1]
+                        totalFiles = Int(str) ?? 1
+                    }
+                }
+                await MainActor.run {
+                    self.currentOperation = message
+                    let scanProgressValue = totalFiles > 0 ? Double(processedCount) / Double(totalFiles) : 0
+                    self.scanProgress = min(max(scanProgressValue, 0.0), 1.0)
+                }
+            }
             targetFiles = files
             progress = 0.8
+            await MainActor.run {
+                self.scanProgress = nil
+                self.processingState = .done
+            }
             print("📁 [TARGET] Target directory scan complete: \(files.count) files")
         } catch {
             errorMessage = "Failed to scan target directory: \(error.localizedDescription)"
+            await MainActor.run {
+                self.scanProgress = nil
+                self.processingState = .done
+            }
         }
     }
     
-    private func scanDirectory(_ url: URL) async throws -> [FileInfo] {
+    private func scanDirectory(_ url: URL, progressCallback: ((Int, String) async -> Void)? = nil) async throws -> [FileInfo] {
         var files: [FileInfo] = []
         var processedCount = 0
+        var totalFiles = 0
         
         print("📁 [SCAN] Starting scan of directory: \(url.path)")
         
+        // First pass: count total files for progress calculation
+        let countEnumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey, .creationDateKey], options: [.skipsHiddenFiles, .skipsPackageDescendants], errorHandler: nil)
+        
+        while let fileURL = countEnumerator?.nextObject() as? URL {
+            let resourceValues = try fileURL.resourceValues(forKeys: [.isSymbolicLinkKey])
+            if resourceValues.isSymbolicLink == true {
+                continue
+            }
+            if isMediaFile(fileURL) {
+                totalFiles += 1
+            }
+        }
+        
+        print("📁 [SCAN] Found \(totalFiles) media files to process")
+        
+        // Second pass: process files with progress updates
         let enumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey, .creationDateKey], options: [.skipsHiddenFiles, .skipsPackageDescendants], errorHandler: nil)
         
         while let fileURL = enumerator?.nextObject() as? URL {
@@ -220,8 +286,11 @@ class FileProcessor: ObservableObject {
                     files.append(fileInfo)
                     processedCount += 1
                     
-                    if processedCount % 100 == 0 {
-                        print("📁 [SCAN] Processed \(processedCount) files...")
+                    // Update progress every 10 files or when we have a small number of files
+                    if processedCount % 10 == 0 || totalFiles <= 50 {
+                        let progressMessage = "Processed \(processedCount) of \(totalFiles) files..."
+                        await progressCallback?(processedCount, progressMessage)
+                        print("📁 [SCAN] \(progressMessage)")
                     }
                 } catch {
                     print("❌ [SCAN] Failed to process file \(fileURL.path): \(error)")
@@ -229,6 +298,8 @@ class FileProcessor: ObservableObject {
             }
         }
         
+        // Final progress update
+        await progressCallback?(totalFiles, "Scan complete: found \(files.count) media files")
         print("📁 [SCAN] Completed scan: found \(files.count) media files")
         return files
     }
@@ -649,7 +720,7 @@ class FileProcessor: ObservableObject {
                         }
                         
                         // Log cache state after comparison
-                        print("�� [DUPLICATES] Cache state after comparison:")
+                        print("🔍 [DUPLICATES] Cache state after comparison:")
                         print("🔍 [DUPLICATES]   File \(mutableFile.displayName) cache: \(formatCacheStatus(mutableFile.checksumStatus))")
                         print("🔍 [DUPLICATES]   Other file \(mutableOtherFile.displayName) cache: \(formatCacheStatus(mutableOtherFile.checksumStatus))")
                         break
