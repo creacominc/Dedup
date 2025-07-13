@@ -715,8 +715,10 @@ struct VideoView: View {
                 queue: .main
             ) { _ in
                 print("DEBUG: VideoView - Player item failed to play")
-                self.videoError = "Video failed to play"
-                self.isLoading = false
+                Task { @MainActor in
+                    self.videoError = "Video failed to play"
+                    self.isLoading = false
+                }
             }
             
             // Get duration and set loading to false
@@ -740,20 +742,24 @@ struct VideoView: View {
             
             // Set loading to false after a short delay to ensure player is ready
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                if self.player != nil && self.player?.currentItem != nil {
-                    self.isLoading = false
-                    print("DEBUG: VideoView - Player ready, setting loading to false")
-                } else {
-                    print("DEBUG: VideoView - Player not ready, showing error")
-                    self.videoError = "Failed to initialize video player"
-                    self.isLoading = false
+                Task { @MainActor in
+                    if self.player != nil && self.player?.currentItem != nil {
+                        self.isLoading = false
+                        print("DEBUG: VideoView - Player ready, setting loading to false")
+                    } else {
+                        print("DEBUG: VideoView - Player not ready, showing error")
+                        self.videoError = "Failed to initialize video player"
+                        self.isLoading = false
+                    }
                 }
             }
             
             // Setup timer for progress updates
             self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                if let player = self.player {
-                    self.currentTime = CMTimeGetSeconds(player.currentTime())
+                Task { @MainActor in
+                    if let player = self.player {
+                        self.currentTime = CMTimeGetSeconds(player.currentTime())
+                    }
                 }
             }
         }
@@ -967,8 +973,10 @@ struct AudioView: View {
             
             // Setup timer for progress updates
             self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                if let player = self.player {
-                    self.currentTime = CMTimeGetSeconds(player.currentTime())
+                Task { @MainActor in
+                    if let player = self.player {
+                        self.currentTime = CMTimeGetSeconds(player.currentTime())
+                    }
                 }
             }
         }
@@ -1873,7 +1881,9 @@ struct BRAWVideoView: View {
                 queue: .main
             ) { _ in
                 print("DEBUG: BRAWVideoView - AVPlayer failed, trying alternative methods")
-                self.tryAlternativeBRAWPlayback()
+                Task { @MainActor in
+                    self.tryAlternativeBRAWPlayback()
+                }
             }
             
             // Check if player is working
@@ -1974,6 +1984,7 @@ struct BRAWMetadata {
 
 // MARK: - BRAW Support Utilities
 
+@MainActor
 class BRAWSupport {
     static let shared = BRAWSupport()
     
@@ -2218,6 +2229,7 @@ class BRAWSupport {
 
 // MARK: - RAW Image Support Utilities
 
+@MainActor
 class RAWSupport {
     static let shared = RAWSupport()
     

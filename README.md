@@ -42,6 +42,47 @@ A powerful macOS application for organizing and deduplicating media files from N
 - Lossless: WAV, FLAC
 - Compressed: AAC, M4A, MP3, OGG
 
+## FFmpeg Support
+
+Dedup includes enhanced FFmpeg integration for improved metadata extraction from various media formats:
+
+### Supported Formats with FFmpeg
+
+**Video Formats:**
+- MKV files (primary use case)
+- AVI, WMV, FLV, WebM
+- Any format that AVFoundation cannot process
+
+**Audio Formats:**
+- OGG, FLAC, WMA
+- Other formats that may have AVFoundation compatibility issues
+
+### FFmpeg Installation
+
+FFmpeg is automatically detected in the following locations:
+- `/usr/local/bin/ffmpeg` (Homebrew installation)
+- `/opt/homebrew/bin/ffmpeg` (Apple Silicon Homebrew installation)
+
+To install FFmpeg:
+```bash
+# Using Homebrew
+brew install ffmpeg
+```
+
+### How It Works
+
+1. **Automatic Detection**: The app automatically detects if FFmpeg is available
+2. **Priority Processing**: MKV files and problematic formats use FFmpeg first
+3. **Fallback System**: If FFmpeg fails, the app falls back to AVFoundation
+4. **Metadata Extraction**: Extracts resolution, frame rate, codec, duration, and audio information
+
+### Benefits
+
+- **MKV Support**: Full metadata extraction from MKV files
+- **Better Compatibility**: Handles formats that AVFoundation struggles with
+- **Enhanced Information**: More detailed metadata extraction
+- **Reliable Fallback**: Graceful degradation when FFmpeg is unavailable
+
 ## Installation
 
 ### Prerequisites

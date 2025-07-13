@@ -169,9 +169,21 @@ class FileProcessor: ObservableObject {
         
         currentOperation = "Scanning source directory..."
         progress = 0.0
-        
+        var totalFiles: Int = 1 // Avoid division by zero
         do {
-            let files = try await scanDirectory(sourceURL)
+            let files = try await scanDirectory(sourceURL) { processedCount, message in
+                if processedCount == 1 {
+                    // On first callback, set totalFiles from the message if possible
+                    if let match = message.range(of: #"of (\d+) files"#, options: .regularExpression) {
+                        let str = String(message[match]).components(separatedBy: " ")[1]
+                        totalFiles = Int(str) ?? 1
+                    }
+                }
+                await MainActor.run {
+                    self.currentOperation = message
+                    self.progress = 0.3 * (totalFiles > 0 ? Double(processedCount) / Double(totalFiles) : 0)
+                }
+            }
             sourceFiles = files
             progress = 0.3
         } catch {
@@ -184,9 +196,21 @@ class FileProcessor: ObservableObject {
         
         currentOperation = "Scanning target directory..."
         progress = 0.3
-        
+        var totalFiles: Int = 1 // Avoid division by zero
         do {
-            let files = try await scanDirectory(targetURL)
+            let files = try await scanDirectory(targetURL) { processedCount, message in
+                if processedCount == 1 {
+                    // On first callback, set totalFiles from the message if possible
+                    if let match = message.range(of: #"of (\d+) files"#, options: .regularExpression) {
+                        let str = String(message[match]).components(separatedBy: " ")[1]
+                        totalFiles = Int(str) ?? 1
+                    }
+                }
+                await MainActor.run {
+                    self.currentOperation = message
+                    self.progress = 0.3 + (0.5 * (totalFiles > 0 ? Double(processedCount) / Double(totalFiles) : 0))
+                }
+            }
             targetFiles = files
             progress = 0.8
             print("📁 [TARGET] Target directory scan complete: \(files.count) files")
@@ -195,12 +219,29 @@ class FileProcessor: ObservableObject {
         }
     }
     
-    private func scanDirectory(_ url: URL) async throws -> [FileInfo] {
+    private func scanDirectory(_ url: URL, progressCallback: ((Int, String) async -> Void)? = nil) async throws -> [FileInfo] {
         var files: [FileInfo] = []
         var processedCount = 0
+        var totalFiles = 0
         
         print("📁 [SCAN] Starting scan of directory: \(url.path)")
         
+        // First pass: count total files for progress calculation
+        let countEnumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey, .creationDateKey], options: [.skipsHiddenFiles, .skipsPackageDescendants], errorHandler: nil)
+        
+        while let fileURL = countEnumerator?.nextObject() as? URL {
+            let resourceValues = try fileURL.resourceValues(forKeys: [.isSymbolicLinkKey])
+            if resourceValues.isSymbolicLink == true {
+                continue
+            }
+            if isMediaFile(fileURL) {
+                totalFiles += 1
+            }
+        }
+        
+        print("📁 [SCAN] Found \(totalFiles) media files to process")
+        
+        // Second pass: process files with progress updates
         let enumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey, .creationDateKey], options: [.skipsHiddenFiles, .skipsPackageDescendants], errorHandler: nil)
         
         while let fileURL = enumerator?.nextObject() as? URL {
@@ -220,8 +261,11 @@ class FileProcessor: ObservableObject {
                     files.append(fileInfo)
                     processedCount += 1
                     
-                    if processedCount % 100 == 0 {
-                        print("📁 [SCAN] Processed \(processedCount) files...")
+                    // Update progress every 10 files or when we have a small number of files
+                    if processedCount % 10 == 0 || totalFiles <= 50 {
+                        let progressMessage = "Processed \(processedCount) of \(totalFiles) files..."
+                        await progressCallback?(processedCount, progressMessage)
+                        print("📁 [SCAN] \(progressMessage)")
                     }
                 } catch {
                     print("❌ [SCAN] Failed to process file \(fileURL.path): \(error)")
@@ -229,6 +273,8 @@ class FileProcessor: ObservableObject {
             }
         }
         
+        // Final progress update
+        await progressCallback?(totalFiles, "Scan complete: found \(files.count) media files")
         print("📁 [SCAN] Completed scan: found \(files.count) media files")
         return files
     }
@@ -651,7 +697,7 @@ class FileProcessor: ObservableObject {
                         }
                         
                         // Log cache state after comparison
-                        print("�� [DUPLICATES] Cache state after comparison:")
+                        print("🔍 [DUPLICATES] Cache state after comparison:")
                         print("🔍 [DUPLICATES]   File \(mutableFile.displayName) cache: \(formatCacheStatus(mutableFile.checksumStatus))")
                         print("🔍 [DUPLICATES]   Other file \(mutableOtherFile.displayName) cache: \(formatCacheStatus(mutableOtherFile.checksumStatus))")
                         break
