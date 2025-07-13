@@ -404,7 +404,7 @@ class FileProcessor: ObservableObject {
                 
                 // Create mutable copies for comparison
                 var mutableFile = file
-                var mutableTargetFile = targetFile
+                let mutableTargetFile = targetFile
                 let isDuplicate = await mutableFile.isDefinitelyDuplicateEfficient(of: mutableTargetFile)
                 
                 // Update the original arrays with the computed checksums
@@ -511,7 +511,7 @@ class FileProcessor: ObservableObject {
                     
                     // Create mutable copies for comparison
                     var mutableFile = file
-                    var mutableTargetFile = targetFile
+                    let mutableTargetFile = targetFile
                     if await mutableFile.isDefinitelyDuplicateEfficient(of: mutableTargetFile) {
                         print("🔍 [DUPLICATES] ❌ File is duplicate of target: \(file.displayName)")
                         isDuplicate = true
@@ -562,7 +562,7 @@ class FileProcessor: ObservableObject {
                         
                         // Create mutable copies for comparison
                         var mutableFile = file
-                        var mutableOtherFile = otherFile
+                        let mutableOtherFile = otherFile
                         if await mutableFile.isDefinitelyDuplicateEfficient(of: mutableOtherFile) {
                             print("🔍 [DUPLICATES] ❌ File is duplicate of other source file: \(file.displayName)")
                             isDuplicate = true
@@ -622,7 +622,6 @@ class FileProcessor: ObservableObject {
         for (index, file) in files.enumerated() {
             print("🔍 [DUPLICATES] Checking file \(index + 1)/\(files.count): \(file.displayName)")
             var isDuplicate = false
-            var duplicateReason = ""
             
             // Check against other source files
             for otherFile in files {
@@ -636,11 +635,10 @@ class FileProcessor: ObservableObject {
                     
                     // Create mutable copies for comparison
                     var mutableFile = file
-                    var mutableOtherFile = otherFile
+                    let mutableOtherFile = otherFile
                     if await mutableFile.isDefinitelyDuplicateEfficient(of: mutableOtherFile) {
                         print("🔍 [DUPLICATES] ❌ File is duplicate of other source file: \(file.displayName)")
                         isDuplicate = true
-                        duplicateReason = "duplicate of other source file \(otherFile.displayName)"
                         
                         // Update the original arrays with the computed checksums
                         if let sourceIndex = sourceFiles.firstIndex(where: { $0.id == file.id }) {
@@ -705,7 +703,7 @@ class FileProcessor: ObservableObject {
                     
                     // Create mutable copies for comparison
                     var mutableFile = file
-                    var mutableOtherFile = otherFile
+                    let mutableOtherFile = otherFile
                     if await mutableFile.isDefinitelyDuplicateEfficient(of: mutableOtherFile) {
                         print("🔍 [UNIQUE] ❌ File is duplicate of other source file: \(file.displayName)")
                         isUnique = false
@@ -741,7 +739,7 @@ class FileProcessor: ObservableObject {
                     
                     // Create mutable copies for comparison
                     var mutableFile = file
-                    var mutableTargetFile = targetFile
+                    let mutableTargetFile = targetFile
                     if await mutableFile.isDefinitelyDuplicateEfficient(of: mutableTargetFile) {
                         print("🔍 [UNIQUE] ❌ File is duplicate of target: \(file.displayName)")
                         isUnique = false
