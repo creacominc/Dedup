@@ -1339,12 +1339,24 @@ struct SettingsView: View {
                 .disabled(!buttonEnabled)
                 .accessibilityIdentifier(buttonIdentifier)
             }
-            if fileProcessor.processingState == .processing {
+            if let scanProgress = fileProcessor.scanProgress {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Processing files...")
+                    Text("Scanning...")
+                        .font(.subheadline)
+                        .accessibilityIdentifier("label-scanningStatus")
+                    ProgressView(value: scanProgress, total: 1.0)
+                        .progressViewStyle(LinearProgressViewStyle())
+                    Text(fileProcessor.currentOperation)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .accessibilityIdentifier("label-scanningOperation")
+                }
+            } else if fileProcessor.processingState == .processing {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(fileProcessor.currentOperation.contains("Scanning") ? "Scanning..." : "Processing files...")
                         .font(.subheadline)
                         .accessibilityIdentifier("label-processingStatus")
-                    ProgressView(value: fileProcessor.progress)
+                    ProgressView(value: fileProcessor.progress, total: 1.0)
                         .progressViewStyle(LinearProgressViewStyle())
                     Text(fileProcessor.currentOperation)
                         .font(.caption)
@@ -1375,18 +1387,18 @@ struct SettingsView: View {
     }
     private var buttonLabel: String {
         switch fileProcessor.processingState {
-        case .processing, .done: return "Processing..."
+        case .processing: return "Processing..."
         default: return "Start Processing"
         }
     }
     private var buttonIdentifier: String {
         switch fileProcessor.processingState {
-        case .processing, .done: return "button-processing"
+        case .processing: return "button-processing"
         default: return "button-startProcessing"
         }
     }
     private var buttonEnabled: Bool {
-        fileProcessor.processingState == .ready
+        fileProcessor.processingState == .ready || fileProcessor.processingState == .done
     }
 }
 

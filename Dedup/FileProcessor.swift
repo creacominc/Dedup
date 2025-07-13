@@ -29,6 +29,7 @@ class FileProcessor: ObservableObject {
     @Published var currentOperation = ""
     @Published var errorMessage: String?
     @Published var processingState: ProcessingState = .initial
+    @Published var scanProgress: Double? = nil
     
     var sourceURL: URL?
     var targetURL: URL?
@@ -167,13 +168,16 @@ class FileProcessor: ObservableObject {
     private func scanSourceDirectory() async {
         guard let sourceURL = sourceURL else { return }
         
-        currentOperation = "Scanning source directory..."
+        await MainActor.run {
+            self.processingState = .processing
+            self.currentOperation = "Scanning..."
+            self.scanProgress = 0.0
+        }
         progress = 0.0
         var totalFiles: Int = 1 // Avoid division by zero
         do {
             let files = try await scanDirectory(sourceURL) { processedCount, message in
                 if processedCount == 1 {
-                    // On first callback, set totalFiles from the message if possible
                     if let match = message.range(of: #"of (\d+) files"#, options: .regularExpression) {
                         let str = String(message[match]).components(separatedBy: " ")[1]
                         totalFiles = Int(str) ?? 1
@@ -181,26 +185,38 @@ class FileProcessor: ObservableObject {
                 }
                 await MainActor.run {
                     self.currentOperation = message
-                    self.progress = 0.3 * (totalFiles > 0 ? Double(processedCount) / Double(totalFiles) : 0)
+                    let scanProgressValue = totalFiles > 0 ? Double(processedCount) / Double(totalFiles) : 0
+                    self.scanProgress = min(max(scanProgressValue, 0.0), 1.0)
                 }
             }
             sourceFiles = files
             progress = 0.3
+            await MainActor.run {
+                self.scanProgress = nil
+                self.processingState = .done
+            }
         } catch {
             errorMessage = "Failed to scan source directory: \(error.localizedDescription)"
+            await MainActor.run {
+                self.scanProgress = nil
+                self.processingState = .done
+            }
         }
     }
     
     private func scanTargetDirectory() async {
         guard let targetURL = targetURL else { return }
         
-        currentOperation = "Scanning target directory..."
+        await MainActor.run {
+            self.processingState = .processing
+            self.currentOperation = "Scanning..."
+            self.scanProgress = 0.0
+        }
         progress = 0.3
         var totalFiles: Int = 1 // Avoid division by zero
         do {
             let files = try await scanDirectory(targetURL) { processedCount, message in
                 if processedCount == 1 {
-                    // On first callback, set totalFiles from the message if possible
                     if let match = message.range(of: #"of (\d+) files"#, options: .regularExpression) {
                         let str = String(message[match]).components(separatedBy: " ")[1]
                         totalFiles = Int(str) ?? 1
@@ -208,14 +224,23 @@ class FileProcessor: ObservableObject {
                 }
                 await MainActor.run {
                     self.currentOperation = message
-                    self.progress = 0.3 + (0.5 * (totalFiles > 0 ? Double(processedCount) / Double(totalFiles) : 0))
+                    let scanProgressValue = totalFiles > 0 ? Double(processedCount) / Double(totalFiles) : 0
+                    self.scanProgress = min(max(scanProgressValue, 0.0), 1.0)
                 }
             }
             targetFiles = files
             progress = 0.8
+            await MainActor.run {
+                self.scanProgress = nil
+                self.processingState = .done
+            }
             print("📁 [TARGET] Target directory scan complete: \(files.count) files")
         } catch {
             errorMessage = "Failed to scan target directory: \(error.localizedDescription)"
+            await MainActor.run {
+                self.scanProgress = nil
+                self.processingState = .done
+            }
         }
     }
     
