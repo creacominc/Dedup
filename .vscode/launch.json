@@ -8,10 +8,10 @@
             "name": "Debug Dedup",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/Dedup.app/Contents/MacOS/Dedup",
+            "program": "${workspaceFolder:Dedup}/.build/debug/Dedup",
             "args": [],
-            "cwd": "${workspaceFolder}",
-            "preLaunchTask": "Build and Prepare Debug",
+            "cwd": "${workspaceFolder:Dedup}",
+            "preLaunchTask": "swift: Build Debug Dedup",
             "stopOnEntry": false,
             "console": "integratedTerminal"
         },
@@ -32,6 +32,15 @@
             "request": "attach",
             "program": "~/Library/Developer/Xcode/DerivedData/Dedup-dwyurlrejkgpvvdxinipacztiapy/Build/Products/Debug/Dedup.app/Contents/MacOS/Dedup",
             "stopOnEntry": false
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Dedup}",
+            "name": "Release Dedup",
+            "program": "${workspaceFolder:Dedup}/.build/release/Dedup",
+            "preLaunchTask": "swift: Build Release Dedup"
         }
     ]
 }
