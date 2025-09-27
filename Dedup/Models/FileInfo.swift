@@ -152,11 +152,15 @@ struct FileInfo: Identifiable, Hashable, Codable {
         guard let creationDate = attributes[.creationDate] as? Date else {
             throw FileError.invalidCreationDate
         }
-        self.creationDate = creationDate
         
         guard let modificationDate = attributes[.modificationDate] as? Date else {
             throw FileError.invalidModificationDate
         }
+        
+        // Use the earlier of creation and modification dates for organization
+        // This handles cases where files were copied/moved and the creation date
+        // is newer than the modification date
+        self.creationDate = min(creationDate, modificationDate)
         self.modificationDate = modificationDate
         
         self.mediaType = MediaType.from(fileExtension: fileExtension)
