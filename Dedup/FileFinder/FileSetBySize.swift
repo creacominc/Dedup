@@ -12,6 +12,8 @@ import Foundation
 class FileSetBySize
 {
     private(set) var fileSetsBySize: [Int: [MediaFile]] = [:]
+    private(set) var lastModified: Date = Date()
+    private(set) var lastProcessed: Date = Date()
     
     // MARK: - Subscript Access
     
@@ -22,6 +24,7 @@ class FileSetBySize
         }
         set {
             fileSetsBySize[size] = newValue
+            lastModified = Date()
         }
     }
     
@@ -32,6 +35,7 @@ class FileSetBySize
         let size = file.fileSize
         // Using default parameter is more efficient - avoids copy-on-write overhead
         fileSetsBySize[size, default: []].append(file)
+        lastModified = Date()
     }
     
     /// Appends multiple files - more efficient than calling append repeatedly
@@ -39,17 +43,20 @@ class FileSetBySize
         for file in files {
             fileSetsBySize[file.fileSize, default: []].append(file)
         }
+        lastModified = Date()
     }
     
     /// Removes all files from the collection
     func removeAll() {
         fileSetsBySize.removeAll()
+        lastModified = Date()
     }
     
     /// Replaces all contents with another FileSetBySize - O(1) operation
     func replaceAll(with other: FileSetBySize) {
         print("replaceAll called: replacing \(self.totalFileCount) files with \(other.totalFileCount) files")
         fileSetsBySize = other.fileSetsBySize
+        lastModified = Date()
         print("After replaceAll: now have \(self.totalFileCount) files")
     }
     
@@ -165,7 +172,9 @@ class FileSetBySize
     // return a map of file sizes and the bytes needed to ensure uniqueness
     public func getBytesNeededForUniqueness(currentLevel: @escaping (Int) -> Void = { _ in }, 
                                            maxLevel: @escaping (Int) -> Void = { _ in },
-                                           shouldCancel: @escaping () -> Bool = { false }) -> [Int:Int]
+                                           shouldCancel: @escaping () -> Bool = { false },
+                                            updateStatus: @escaping (String) -> Void = { _ in }
+                                            ) -> [Int:Int]
     {
         // map to be returned.
         var bytesNeeded: [Int:Int] = [:]
@@ -260,6 +269,8 @@ class FileSetBySize
                         "\tSize: \(fileSize), \t\(file.checksums.max(by: <)!)  :  \(file.fileUrl.path())"
                      )
                  }
+                // set the size to the file size
+                bytesNeeded[fileSize] = fileSize
             }
             
             // Update progress after processing each size
@@ -267,7 +278,11 @@ class FileSetBySize
             DispatchQueue.main.async {
                 currentLevel(processedCount)
             }
+            
+            // Update processing timestamp to signal that isUnique properties have been modified
+            lastProcessed = Date()
         } // for each size
+        
         return bytesNeeded
     }
 

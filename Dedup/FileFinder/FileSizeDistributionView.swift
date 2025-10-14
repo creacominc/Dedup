@@ -15,6 +15,7 @@ struct FileSizeDistributionView: View
     // [inout] fileSetBySize - files grouped by size
     @Binding var sourceFileSetBySize: FileSetBySize
     @Binding var targetFileSetBySize: FileSetBySize
+    @Binding var mergedFileSetBySize: FileSetBySize
 
     // [inout] updateDistribution - set this when updated
     @Binding var updateDistribution: Bool
@@ -35,26 +36,21 @@ struct FileSizeDistributionView: View
 
     var body: some View
     {
-        // Show a bar chart of file counts by file size, using human-readable size labels
-        let allFileSetsAllFilesBySize : FileSetBySize = sourceFileSetBySize.merge(
-            with: targetFileSetBySize, sizeLimit: true
-        )
-
         // Create size bins for better visualization when there are many unique sizes
-        let sizes = allFileSetsAllFilesBySize.sortedSizes
+        let sizes = mergedFileSetBySize.sortedSizes
         let data: [(size: String, count: Int, sortKey: Int)]
         
         if sizes.count > 20 {
             // Use size bins when there are too many unique sizes
-            data = createSizeBins(from: allFileSetsAllFilesBySize)
+            data = createSizeBins(from: mergedFileSetBySize)
             print( "Created \(data.count) size bins" )
             // log minimum and maximum sizes:
-            print( "min size: \(allFileSetsAllFilesBySize.sortedSizes.first ?? 0)")
-            print( "max size: \(allFileSetsAllFilesBySize.sortedSizes.last ?? 0)")
+            print( "min size: \(mergedFileSetBySize.sortedSizes.first ?? 0)")
+            print( "max size: \(mergedFileSetBySize.sortedSizes.last ?? 0)")
         } else {
             // Show individual sizes when there are few unique sizes
             data = sizes.map { size in
-                (size: formatBytes(size), count: allFileSetsAllFilesBySize.count(for: size), sortKey: size)
+                (size: formatBytes(size), count: mergedFileSetBySize.count(for: size), sortKey: size)
             }
             // print( "Showing \(data.count) size bars" )
         }
@@ -133,7 +129,7 @@ struct FileSizeDistributionView: View
             // Disable processing when analysis is in progress (updateDistribution = false)
             if newValue {
                 // Analysis is complete - enable if we have data
-                processEnabled = allFileSetsAllFilesBySize.totalFileCount > 0
+                processEnabled = mergedFileSetBySize.totalFileCount > 0
             } else {
                 // Analysis is in progress or URL changed - disable
                 processEnabled = false
@@ -141,7 +137,7 @@ struct FileSizeDistributionView: View
         }
         .onAppear {
             // Set initial state based on current data
-            processEnabled = updateDistribution && allFileSetsAllFilesBySize.totalFileCount > 0
+            processEnabled = updateDistribution && mergedFileSetBySize.totalFileCount > 0
         }
     }
     
@@ -231,11 +227,13 @@ struct FileSizeDistributionView: View
 {
     @Previewable @State var sourceFileSetBySize = FileSetBySize()
     @Previewable @State var targetFileSetBySize = FileSetBySize()
+    @Previewable @State var mergedFileSetBySize = FileSetBySize()
     @Previewable @State var updateDistribution: Bool = false
     @Previewable @State var processEnabled: Bool = false
 
     FileSizeDistributionView( sourceFileSetBySize: $sourceFileSetBySize
                               , targetFileSetBySize: $targetFileSetBySize
+                              , mergedFileSetBySize: $mergedFileSetBySize
                               , updateDistribution: $updateDistribution
                               , processEnabled: $processEnabled
     )

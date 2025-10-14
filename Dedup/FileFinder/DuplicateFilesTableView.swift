@@ -21,9 +21,17 @@ struct DuplicateFilesTableView: View {
     // [in] fileSetBySize - files grouped by size
     @Binding var fileSetBySize: FileSetBySize
     
+    // Sorting state
+    @State private var sortOrder: [KeyPathComparator<DuplicateFileRow>] = [
+        .init(\.fileSize, order: .forward)  // Default: sort by file size ascending
+    ]
+    
     // Compute the list of non-unique files with their checksum information
     private var duplicateFiles: [DuplicateFileRow] {
         var rows: [DuplicateFileRow] = []
+        
+        // Access lastProcessed to ensure this computed property re-evaluates when uniqueness processing completes
+        _ = fileSetBySize.lastProcessed
         
         // Iterate through all file sizes
         for (_, files) in fileSetBySize.fileSetsBySize {
@@ -46,7 +54,7 @@ struct DuplicateFilesTableView: View {
             }
         }
         
-        return rows
+        return rows.sorted(using: sortOrder)
     }
 
     var body: some View {
@@ -59,18 +67,18 @@ struct DuplicateFilesTableView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
             
-            Table(duplicateFiles) {
+            Table(duplicateFiles, sortOrder: $sortOrder) {
                 TableColumn("File Name", value: \.fileName)
                 TableColumn("Path", value: \.filePath)
-                TableColumn("File Size") { row in
+                TableColumn("File Size", value: \.fileSize) { row in
                     Text(ByteCountFormatter.string(fromByteCount: Int64(row.fileSize), countStyle: .file))
                 }
                 .width(min: 80, max: 120)
-                TableColumn("Max Checksum Size") { row in
+                TableColumn("Max Checksum Size", value: \.maxChecksumSize) { row in
                     Text(ByteCountFormatter.string(fromByteCount: Int64(row.maxChecksumSize), countStyle: .file))
                 }
                 .width(min: 100, max: 150)
-                TableColumn("Checksum at Max Size") { row in
+                TableColumn("Checksum at Max Size", value: \.checksumAtMaxSize) { row in
                     Text(row.checksumAtMaxSize.prefix(16) + "...")
                         .font(.system(.caption, design: .monospaced))
                         .help(row.checksumAtMaxSize)

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct FileFinderView: View
 {
+    // [out] statusMsg - update with status
     @Binding var statusMsg: String
     @State var sourceURL: URL?
     @State var targetURL: URL?
@@ -18,6 +19,7 @@ struct FileFinderView: View
     @State var targetEnabled: Bool = true
     @State var sourceFileSetBySize = FileSetBySize()
     @State var targetFileSetBySize = FileSetBySize()
+    @State var mergedFileSetBySize = FileSetBySize()
     @State var updateDistribution: Bool = false
     @State var processEnabled: Bool = false
     @State var currentLevel: Int = 0
@@ -41,16 +43,19 @@ struct FileFinderView: View
             )
             FileSizeDistributionView( sourceFileSetBySize: $sourceFileSetBySize
                                       , targetFileSetBySize: $targetFileSetBySize
+                                      , mergedFileSetBySize: $mergedFileSetBySize
                                       , updateDistribution: $updateDistribution
                                       , processEnabled: $processEnabled
             )
 
             // ChecksumSizeDistribution
-            ChecksumSizeDistribution( sourceURL: sourceURL
+            ChecksumSizeDistribution( statusMsg: $statusMsg
+                                      , sourceURL: sourceURL
                                       , processEnabled: $processEnabled
-                                      , fileSetBySize: $sourceFileSetBySize
+                                      , fileSetBySize: $mergedFileSetBySize
                                       , currentLevel: $currentLevel
-                                      , maxLevel: $maxLevel )
+                                      , maxLevel: $maxLevel
+            )
 
             // progress bar
             ProgressBarView( currentLevel: $currentLevel,
@@ -58,16 +63,26 @@ struct FileFinderView: View
 
 
             // file extensions handled
-            FileExtensionsHandledView( fileSetBySize: $sourceFileSetBySize )
+            FileExtensionsHandledView( fileSetBySize: $mergedFileSetBySize )
 
             // table of duplicate files
-            DuplicateFilesTableView( fileSetBySize: $sourceFileSetBySize )
+            DuplicateFilesTableView( fileSetBySize: $mergedFileSetBySize )
 
         } // vstack
         .padding( )
         .onAppear( perform: {
             statusMsg = "Ready"
         } )
+        .onChange(of: sourceFileSetBySize.lastModified) { oldValue, newValue in
+            // Update merged object when source changes
+            mergedFileSetBySize = sourceFileSetBySize.merge(with: targetFileSetBySize, sizeLimit: true)
+            statusMsg = "Merge on change of source.  Size: \(mergedFileSetBySize.totalFileCount) vs \(sourceFileSetBySize.totalFileCount)"
+        }
+        .onChange(of: targetFileSetBySize.lastModified) { oldValue, newValue in
+            // Update merged object when target changes
+            mergedFileSetBySize = sourceFileSetBySize.merge(with: targetFileSetBySize, sizeLimit: true)
+            statusMsg = "Merge on change of target.  Size: \(mergedFileSetBySize.totalFileCount) vs \(sourceFileSetBySize.totalFileCount)"
+        }
     }
 }
 

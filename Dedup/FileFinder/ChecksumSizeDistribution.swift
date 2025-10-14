@@ -9,6 +9,8 @@ import SwiftUI
 
 struct ChecksumSizeDistribution: View
 {
+    // [out] statusMsg - update with status
+    @Binding var statusMsg: String
     // [in] sourceURL - to detect when a new folder is selected
     var sourceURL: URL?
     // [in] processEnabled - true when there is data to process
@@ -70,34 +72,50 @@ struct ChecksumSizeDistribution: View
                         bytesNeededBySize = [:]
                         
                         // Process on background thread to keep UI responsive
-                        DispatchQueue.global(qos: .userInitiated).async {
+                        DispatchQueue.global(qos: .userInitiated).async
+                        {
                             // bytes needed for uniqueness as a percent of size
                             let results = fileSetBySize.getBytesNeededForUniqueness(
-                                currentLevel: { level in
-                                    self.currentLevel = level
-                                },
-                                maxLevel: { max in
-                                    self.maxLevel = max
-                                },
-                                shouldCancel: {
-                                    return self.shouldCancel
-                                }
-                            )
+                                    currentLevel: { level in
+                                        self.currentLevel = level
+                                    },
+                                    maxLevel: { max in
+                                        self.maxLevel = max
+                                    },
+                                    shouldCancel: {
+                                        return self.shouldCancel
+                                    },
+                                    updateStatus: {
+                                        self.statusMsg = $0
+                                        print(
+                                            "Status Msg update: \(statusMsg)"
+                                        )
+                                    }
+                                )
                             
                             // Update results on main thread
-                            DispatchQueue.main.async {
-                                if !self.shouldCancel {
+                            DispatchQueue.main.async
+                            {
+                                if !self.shouldCancel
+                                {
                                     // Only update results if not cancelled
                                     self.bytesNeededBySize = results
-                                    print("Processing completed. Results count: \(results.count)")
-                                    if results.isEmpty {
-                                        print("No results found - all files may be unique or identical")
+                                    if results.isEmpty
+                                    {
+                                        self.statusMsg = "No results found - all files may be unique or identical"
                                     }
-                                } else {
-                                    print("Processing was cancelled")
+                                    else
+                                    {
+                                        self.statusMsg = "Processing completed. Results count: \(results.count)"
+                                    }
+                                }
+                                else
+                                {
+                                    self.statusMsg = "Processing was cancelled"
                                 }
                                 self.isProcessing = false
                                 self.shouldCancel = false
+                                print( self.statusMsg )
                             }
                         }
                     }
@@ -218,13 +236,15 @@ struct ChecksumSizeDistribution: View
 
 #Preview
 {
+    @Previewable @State var statusMsg: String = "n/a"
     @Previewable @State var sourceURL: URL? = nil
     @Previewable @State var processEnabled: Bool = true
     @Previewable @State var fileSetBySize: FileSetBySize = FileSetBySize()
     @Previewable @State var currentLevel: Int = 0
     @Previewable @State var maxLevel: Int = 100
 
-    ChecksumSizeDistribution( sourceURL: sourceURL
+    ChecksumSizeDistribution( statusMsg: $statusMsg
+                              , sourceURL: sourceURL
                               , processEnabled: $processEnabled
                               , fileSetBySize: $fileSetBySize
                               , currentLevel: $currentLevel
