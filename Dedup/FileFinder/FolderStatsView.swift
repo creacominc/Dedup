@@ -11,7 +11,8 @@ struct FolderStatsView: View
 {
     // [in] URL to be set when the user selects a path
     var sourceURL: URL?
-
+    // [in] prompt
+    var prompt: String
     // [inout] updateDistribution - set this when updated
     @Binding var updateDistribution: Bool
 
@@ -25,15 +26,15 @@ struct FolderStatsView: View
     {
         VStack(alignment: .leading, spacing: 8)
         {
-            if let url = sourceURL
+            if let sourceURL = sourceURL
             {
                 // Folder path text field
-                Text("Folder: \(url.path())")
+                Text("Folder: \(sourceURL.path())")
                     .font(.headline)
-
+                
                 if analyzer.isAnalyzing
                 {
-                    ProgressView("Analyzing folder...")
+                    ProgressView("Analyzing \(prompt) folder...")
                 }
                 else
                 {
@@ -50,7 +51,7 @@ struct FolderStatsView: View
             }
             else
             {
-                Text("No folder selected")
+                Text("Select a \(prompt) folder.")
                     .foregroundColor(.secondary)
             }
         }
@@ -99,6 +100,7 @@ struct FolderStatsView: View
     @Previewable @State var updateDistribution = false
     
     FolderStatsView(sourceURL: sourceURL
+                    , prompt: "first"
                     , updateDistribution: $updateDistribution
                     , fileSetBySize: $fileSetBySize
     )
@@ -111,6 +113,7 @@ struct FolderStatsView: View
     @Previewable @State var updateDistribution = false
 
     FolderStatsView(sourceURL: sourceURL
+                    , prompt: "second"
                     , updateDistribution: $updateDistribution
                     , fileSetBySize: $fileSetBySize
     )

@@ -9,10 +9,15 @@ import SwiftUI
 
 struct FileFinderView: View
 {
+    @Binding var statusMsg: String
     @State var sourceURL: URL?
-    @State var folderSelected: Bool = false
+    @State var targetURL: URL?
+    @State var sourceFolderSelected: Bool = false
+    @State var targetFolderSelected: Bool = false
     @State var sourceEnabled: Bool = true
-    @State var fileSetBySize = FileSetBySize()
+    @State var targetEnabled: Bool = true
+    @State var sourceFileSetBySize = FileSetBySize()
+    @State var targetFileSetBySize = FileSetBySize()
     @State var updateDistribution: Bool = false
     @State var processEnabled: Bool = false
     @State var currentLevel: Int = 0
@@ -25,16 +30,17 @@ struct FileFinderView: View
             // folder picker
             FolderSelectionView(
                 sourceURL: $sourceURL,
-                folderSelected: $folderSelected,
+                targetURL: $targetURL,
+                sourceFolderSelected: $sourceFolderSelected,
+                targetFolderSelected: $targetFolderSelected,
                 sourceEnabled: $sourceEnabled,
-                fileSetBySize: $fileSetBySize
+                targetEnabled: $targetEnabled,
+                sourceFileSetBySize: $sourceFileSetBySize,
+                targetFileSetBySize: $targetFileSetBySize
+                , updateDistribution: $updateDistribution
             )
-
-            // folder stats
-            FolderStatsView( sourceURL: sourceURL
-                             , updateDistribution: $updateDistribution
-                             , fileSetBySize: $fileSetBySize )
-            FileSizeDistributionView( fileSetBySize: $fileSetBySize
+            FileSizeDistributionView( sourceFileSetBySize: $sourceFileSetBySize
+                                      , targetFileSetBySize: $targetFileSetBySize
                                       , updateDistribution: $updateDistribution
                                       , processEnabled: $processEnabled
             )
@@ -42,7 +48,7 @@ struct FileFinderView: View
             // ChecksumSizeDistribution
             ChecksumSizeDistribution( sourceURL: sourceURL
                                       , processEnabled: $processEnabled
-                                      , fileSetBySize: $fileSetBySize
+                                      , fileSetBySize: $sourceFileSetBySize
                                       , currentLevel: $currentLevel
                                       , maxLevel: $maxLevel )
 
@@ -52,16 +58,20 @@ struct FileFinderView: View
 
 
             // file extensions handled
-            FileExtensionsHandledView( fileSetBySize: $fileSetBySize )
+            FileExtensionsHandledView( fileSetBySize: $sourceFileSetBySize )
 
             // table of duplicate files
-            DuplicateFilesTableView( fileSetBySize: $fileSetBySize )
+            DuplicateFilesTableView( fileSetBySize: $sourceFileSetBySize )
 
-        }
+        } // vstack
         .padding( )
+        .onAppear( perform: {
+            statusMsg = "Ready"
+        } )
     }
 }
 
 #Preview {
-    FileFinderView()
+    @Previewable @State var statusMsg: String = "testing  ..."
+    FileFinderView( statusMsg: $statusMsg )
 }

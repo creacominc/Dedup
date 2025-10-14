@@ -99,6 +99,25 @@ class FileSetBySize
         fileSetsBySize.filter { $0.value.count == 1 }.map { $0.key }
     }
 
+    public func merge(with other: FileSetBySize, sizeLimit: Bool ) -> FileSetBySize
+    {
+        let result: FileSetBySize = FileSetBySize()
+        // copy self to new collection
+        for (_, files) in self.fileSetsBySize
+        {
+            result.append(contentsOf: files)
+        }
+        // copy other to new collection
+        for (size, files) in other.fileSetsBySize
+        {
+            // if sizeLimit is true, only append if the size is found in the source
+            if( ( !sizeLimit ) || ( self.fileSetsBySize.keys.contains(size) ) )
+            {
+                result.append(contentsOf: files)
+            }
+        }
+        return result
+    }
 
     private func getChecksumSizes( size: Int ) -> [Int]
     {

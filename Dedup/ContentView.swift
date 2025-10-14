@@ -4,20 +4,35 @@ import AppKit
 
 struct ContentView: View {
     @State private var selectedTab = 0
+    @State var statusMsg: String = "testing  ..."
 
-    var body: some View {
-        TabView(selection: $selectedTab) {
-            FileFinderView()
-                .tabItem {
+    var body: some View
+    {
+        VStack
+        {
+            TabView(selection: $selectedTab)
+            {
+                FileFinderView( statusMsg: $statusMsg )
+                    .tabItem
+                {
                     Label("Finder", systemImage: "list.bullet")
                 }
                 .tag(0)
-            
-            Text("Tab 2 - Dedup")
-                .tabItem {
+                
+                DedupProcessView( statusMsg: $statusMsg )
+                    .tabItem
+                {
                     Label("Dedup", systemImage: "key.fill")
                 }
                 .tag(1)
+            } // tab view
+
+            Text( statusMsg )
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background( Color.gray.opacity(0.1) )
+                .cornerRadius(8)
+            Spacer()
         }
     }
 }

@@ -3,6 +3,7 @@ import AVKit
 import AppKit
 
 struct DedupProcessView: View {
+    @Binding var statusMsg: String
     @StateObject private var fileProcessor = FileProcessor()
     @State private var selectedFile: FileInfo?
     @State private var selectedTab = 2 // Default to Settings tab
@@ -1991,7 +1992,8 @@ struct BRAWMetadata {
 }
 
 #Preview {
-    DedupProcessView()
+    @Previewable @State var statusMsg: String = "testing  ..."
+    DedupProcessView( statusMsg: $statusMsg )
 }
 
 // MARK: - BRAW Support Utilities

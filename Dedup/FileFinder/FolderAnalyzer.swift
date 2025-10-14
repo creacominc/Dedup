@@ -159,8 +159,10 @@ class FolderAnalyzer
     // MARK: - Private Helper Methods
     
     /// Detects if a folder is a CinemaDNG folder by checking for characteristic file patterns
-    private func isCinemaDNGFolder(url: URL, fileManager: FileManager) -> Bool {
-        do {
+    private func isCinemaDNGFolder(url: URL, fileManager: FileManager) -> Bool
+    {
+        do
+        {
             // Get the contents of the directory (non-recursively)
             let contents = try fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
             
@@ -168,23 +170,28 @@ class FolderAnalyzer
             let dngFiles = contents.filter { $0.pathExtension.lowercased() == "dng" }
             
             // If we have multiple .dng files, check if they follow the pattern
-            if dngFiles.count > 3 {
+            if dngFiles.count > 3
+            {
                 // Check if files have the pattern: prefix_NNNNNN.dng
-                let hasSequentialPattern = dngFiles.allSatisfy { fileURL in
+                let hasSequentialPattern = dngFiles.allSatisfy
+                { fileURL in
                     let fileName = fileURL.deletingPathExtension().lastPathComponent
                     // Check if the file name ends with _NNNNNN (underscore followed by 6 digits)
                     let pattern = /^.+_\d{6}$/
                     return fileName.wholeMatch(of: pattern) != nil
                 }
-                
-                if hasSequentialPattern {
+
+                if hasSequentialPattern
+                {
                     print("Detected CinemaDNG folder pattern in: \(url.lastPathComponent)")
                     return true
                 }
             }
             
             return false
-        } catch {
+        }
+        catch
+        {
             // If we can't read the directory, don't skip it
             return false
         }

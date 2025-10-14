@@ -13,7 +13,8 @@ struct FileSizeDistributionView: View
 {
 
     // [inout] fileSetBySize - files grouped by size
-    @Binding var fileSetBySize: FileSetBySize
+    @Binding var sourceFileSetBySize: FileSetBySize
+    @Binding var targetFileSetBySize: FileSetBySize
 
     // [inout] updateDistribution - set this when updated
     @Binding var updateDistribution: Bool
@@ -35,22 +36,25 @@ struct FileSizeDistributionView: View
     var body: some View
     {
         // Show a bar chart of file counts by file size, using human-readable size labels
+        let allFileSetsAllFilesBySize : FileSetBySize = sourceFileSetBySize.merge(
+            with: targetFileSetBySize, sizeLimit: true
+        )
 
         // Create size bins for better visualization when there are many unique sizes
-        let sizes = fileSetBySize.sortedSizes
+        let sizes = allFileSetsAllFilesBySize.sortedSizes
         let data: [(size: String, count: Int, sortKey: Int)]
         
         if sizes.count > 20 {
             // Use size bins when there are too many unique sizes
-            data = createSizeBins(from: fileSetBySize)
+            data = createSizeBins(from: allFileSetsAllFilesBySize)
             print( "Created \(data.count) size bins" )
             // log minimum and maximum sizes:
-            print( "min size: \(fileSetBySize.sortedSizes.first ?? 0)")
-            print( "max size: \(fileSetBySize.sortedSizes.last ?? 0)")
+            print( "min size: \(allFileSetsAllFilesBySize.sortedSizes.first ?? 0)")
+            print( "max size: \(allFileSetsAllFilesBySize.sortedSizes.last ?? 0)")
         } else {
             // Show individual sizes when there are few unique sizes
             data = sizes.map { size in
-                (size: formatBytes(size), count: fileSetBySize.count(for: size), sortKey: size)
+                (size: formatBytes(size), count: allFileSetsAllFilesBySize.count(for: size), sortKey: size)
             }
             // print( "Showing \(data.count) size bars" )
         }
@@ -129,7 +133,7 @@ struct FileSizeDistributionView: View
             // Disable processing when analysis is in progress (updateDistribution = false)
             if newValue {
                 // Analysis is complete - enable if we have data
-                processEnabled = fileSetBySize.totalFileCount > 0
+                processEnabled = allFileSetsAllFilesBySize.totalFileCount > 0
             } else {
                 // Analysis is in progress or URL changed - disable
                 processEnabled = false
@@ -137,7 +141,7 @@ struct FileSizeDistributionView: View
         }
         .onAppear {
             // Set initial state based on current data
-            processEnabled = updateDistribution && fileSetBySize.totalFileCount > 0
+            processEnabled = updateDistribution && allFileSetsAllFilesBySize.totalFileCount > 0
         }
     }
     
@@ -225,11 +229,13 @@ struct FileSizeDistributionView: View
 
 #Preview
 {
-    @Previewable @State var fileSetBySize: FileSetBySize = FileSetBySize()
+    @Previewable @State var sourceFileSetBySize = FileSetBySize()
+    @Previewable @State var targetFileSetBySize = FileSetBySize()
     @Previewable @State var updateDistribution: Bool = false
     @Previewable @State var processEnabled: Bool = false
 
-    FileSizeDistributionView( fileSetBySize: $fileSetBySize
+    FileSizeDistributionView( sourceFileSetBySize: $sourceFileSetBySize
+                              , targetFileSetBySize: $targetFileSetBySize
                               , updateDistribution: $updateDistribution
                               , processEnabled: $processEnabled
     )
