@@ -5,6 +5,7 @@ import AppKit
 struct ContentView: View {
     @State private var selectedTab = 0
     @State var statusMsg: String = "testing  ..."
+    @State var mergedFileSetBySize = FileSetBySize()
 
     var body: some View
     {
@@ -12,14 +13,16 @@ struct ContentView: View {
         {
             TabView(selection: $selectedTab)
             {
-                FileFinderView( statusMsg: $statusMsg )
+                FileFinderView( statusMsg: $statusMsg,
+                                mergedFileSetBySize: $mergedFileSetBySize )
                     .tabItem
                 {
                     Label("Finder", systemImage: "list.bullet")
                 }
                 .tag(0)
-                
-                DedupProcessView( statusMsg: $statusMsg )
+
+                DedupProcessView( statusMsg: $statusMsg,
+                                  mergedFileSetBySize: $mergedFileSetBySize )
                     .tabItem
                 {
                     Label("Dedup", systemImage: "key.fill")

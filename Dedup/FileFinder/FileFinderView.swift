@@ -19,7 +19,7 @@ struct FileFinderView: View
     @State var targetEnabled: Bool = true
     @State var sourceFileSetBySize = FileSetBySize()
     @State var targetFileSetBySize = FileSetBySize()
-    @State var mergedFileSetBySize = FileSetBySize()
+    @Binding var mergedFileSetBySize : FileSetBySize
     @State var updateDistribution: Bool = false
     @State var processEnabled: Bool = false
     @State var currentLevel: Int = 0
@@ -88,5 +88,8 @@ struct FileFinderView: View
 
 #Preview {
     @Previewable @State var statusMsg: String = "testing  ..."
-    FileFinderView( statusMsg: $statusMsg )
+    @Previewable @State var mergedFileSetBySize = FileSetBySize()
+    FileFinderView( statusMsg: $statusMsg
+                    , mergedFileSetBySize: $mergedFileSetBySize
+    )
 }
