@@ -94,41 +94,7 @@
 ////        processingState = .done
 ////    }
 //    
-//    func moveSelectedFiles(_ selectedFiles: [FileInfo]) async {
-//        guard !selectedFiles.isEmpty else { return }
-//        
-//        isProcessing = true
-//        processingState = .processing
-//        currentOperation = "Moving selected files..."
-//        progress = 0.0
-//        
-//        let totalFiles = selectedFiles.count
-//        var movedCount = 0
-//        
-//        for file in selectedFiles {
-//            do {
-//                let targetPath = getTargetPath(for: file)
-//                try await moveFile(file, to: targetPath)
-//                movedCount += 1
-//                progress = Double(movedCount) / Double(totalFiles)
-//                currentOperation = "Moved \(movedCount) of \(totalFiles) files..."
-//            } catch {
-//                errorMessage = "Failed to move \(file.name): \(error.localizedDescription)"
-//                break
-//            }
-//        }
-//        
-//        // Remove moved files from the filesToMove list
-//        filesToMove.removeAll { file in
-//            selectedFiles.contains { $0.id == file.id }
-//        }
-//        
-//        isProcessing = false
-//        processingState = .done
-//        currentOperation = ""
-//        progress = 0.0
-//    }
-//    
+
 //    func deleteSelectedDuplicates(_ duplicates: [FileInfo]) async {
 //        isProcessing = true
 //        processingState = .processing
@@ -845,61 +811,7 @@
 //        print("🔍 [UNIQUE] Found \(uniqueFiles.count) unique files out of \(files.count) total")
 //        return uniqueFiles
 //    }
-//    
-//    private func getDestinationURL(for file: FileInfo, in targetURL: URL) throws -> URL {
-//        let calendar = Calendar.current
-//        let components = calendar.dateComponents([.year, .month, .day], from: file.creationDate)
-//        
-//        let year = String(format: "%04d", components.year ?? 2000)
-//        let month = String(format: "%02d", components.month ?? 1)
-//        let day = String(format: "%02d", components.day ?? 1)
-//        
-//        let mediaTypeFolder = file.mediaType.displayName
-//        let destinationFolder = targetURL
-//            .appendingPathComponent(mediaTypeFolder)
-//            .appendingPathComponent(year)
-//            .appendingPathComponent(month)
-//            .appendingPathComponent(day)
-//        
-//        // Create directory structure if it doesn't exist
-//        try fileManager.createDirectory(at: destinationFolder, withIntermediateDirectories: true)
-//        
-//        return destinationFolder.appendingPathComponent(file.displayName)
-//    }
-//    
-//    private func getTargetPath(for file: FileInfo) -> URL {
-//        guard let targetURL = targetURL else {
-//            fatalError("Target URL not set")
-//        }
-//        
-//        do {
-//            return try getDestinationURL(for: file, in: targetURL)
-//        } catch {
-//            fatalError("Failed to get target path: \(error)")
-//        }
-//    }
-//    
-//    private func moveFile(_ file: FileInfo, to destinationURL: URL) async throws {
-//        // Check if destination file already exists
-//        if fileManager.fileExists(atPath: destinationURL.path) {
-//            // Generate unique filename
-//            let filename = destinationURL.deletingPathExtension().lastPathComponent
-//            let fileExtension = destinationURL.pathExtension
-//            var counter = 1
-//            var newDestinationURL = destinationURL
-//            
-//            while fileManager.fileExists(atPath: newDestinationURL.path) {
-//                let newFilename = "\(filename)_\(counter).\(fileExtension)"
-//                newDestinationURL = destinationURL.deletingLastPathComponent().appendingPathComponent(newFilename)
-//                counter += 1
-//            }
-//            
-//            try fileManager.moveItem(at: file.fileUrl, to: newDestinationURL)
-//        } else {
-//            try fileManager.moveItem(at: file.fileUrl, to: destinationURL)
-//        }
-//    }
-//    
+
 //    private func printEfficiencyStatistics() {
 //        print("📊 [STATS] Efficiency Statistics:")
 //        print("📊 [STATS] - Total source files: \(sourceFiles.count)")

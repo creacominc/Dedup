@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State var statusMsg: String = "testing  ..."
     @State var mergedFileSetBySize = FileSetBySize()
+    @State var targetURL: URL?
 
     var body: some View
     {
@@ -14,8 +15,10 @@ struct ContentView: View {
             TabView(selection: $selectedTab)
             {
                 // file selection, stats, and processing
-                FileFinderView( statusMsg: $statusMsg,
-                                mergedFileSetBySize: $mergedFileSetBySize )
+                FileFinderView( statusMsg: $statusMsg
+                                , targetURL: $targetURL
+                                , mergedFileSetBySize: $mergedFileSetBySize
+                )
                     .tabItem
                     {
                         Label("Finder", systemImage: "list.bullet")
@@ -23,8 +26,10 @@ struct ContentView: View {
                     .tag(0)
 
                 // files to move
-                FilesToMoveListView( statusMsg: $statusMsg,
-                                    mergedFileSetBySize: $mergedFileSetBySize )
+                FilesToMoveListView( statusMsg: $statusMsg
+                                     , mergedFileSetBySize: $mergedFileSetBySize
+                                     , targetURL: $targetURL
+                )
                     .tabItem
                     {
                         Label( "Unique", systemImage: "doc.fill" )

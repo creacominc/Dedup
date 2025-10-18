@@ -12,7 +12,7 @@ struct FileFinderView: View
     // [out] statusMsg - update with status
     @Binding var statusMsg: String
     @State var sourceURL: URL?
-    @State var targetURL: URL?
+    @Binding var targetURL: URL?
     @State var sourceFolderSelected: Bool = false
     @State var targetFolderSelected: Bool = false
     @State var sourceEnabled: Bool = true
@@ -89,7 +89,10 @@ struct FileFinderView: View
 #Preview {
     @Previewable @State var statusMsg: String = "testing  ..."
     @Previewable @State var mergedFileSetBySize = FileSetBySize()
+    @Previewable @State var targetURL: URL?
+
     FileFinderView( statusMsg: $statusMsg
+                    , targetURL: $targetURL
                     , mergedFileSetBySize: $mergedFileSetBySize
     )
 }

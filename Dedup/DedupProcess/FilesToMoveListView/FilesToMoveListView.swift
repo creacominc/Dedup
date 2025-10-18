@@ -1,19 +1,31 @@
 import SwiftUI
+import AVKit
 
 struct FilesToMoveListView: View
 {
     // [out] statusMsg - update with status
     @Binding var statusMsg: String
     @Binding var mergedFileSetBySize : FileSetBySize
+    @Binding var targetURL: URL?
     @State var selectedFile: MediaFile? = nil
-
-//    @ObservedObject var fileProcessor: FileProcessor
-//    @Binding var selectedFile: MediaFile?
-    @State private var selectedFiles: Set<MediaFile> = []
-    @State private var selectAll = false
     
+    //    @ObservedObject var fileProcessor: FileProcessor
+    //    @Binding var selectedFile: MediaFile?
+    @State private var selectedFiles: Set<MediaFile> = []
+    @State private var selectAll: Bool = false
+    private let fileManager: FileManager = FileManager.default
+    private let calendar: Calendar = Calendar.current
+    
+    // State for media player
+    @State private var player: AVPlayer?
+    @State private var isPlaying: Bool = false
+    @State private var currentTime: Double = 0
+    @State private var duration: Double = 0
+    @State private var timer: Timer?
+
     var body: some View
     {
+
         VStack(spacing: 16)
         {
             HStack
@@ -38,11 +50,11 @@ struct FilesToMoveListView: View
                 .disabled( mergedFileSetBySize.totalUniqueFileCount == 0 )
                 .accessibilityIdentifier("button-selectAllFiles")
                 Button("Move Selected") {
-//                    Task {
-//                        await fileProcessor.moveSelectedFiles(Array(selectedFiles))
-//                        selectedFiles.removeAll()
-//                        selectAll = false
-//                    }
+                    Task {
+                        await moveSelectedFiles(Array(selectedFiles))
+                        selectedFiles.removeAll()
+                        selectAll = false
+                    }
                 }
                 .disabled( mergedFileSetBySize.totalUniqueFileCount == 0 )
                 .accessibilityIdentifier("button-moveSelectedFiles")
@@ -68,36 +80,224 @@ struct FilesToMoveListView: View
             }
             else
             {
-                List( mergedFileSetBySize.uniqueFiles, id: \.id, selection: $selectedFile)
-                { file in
-                    HStack
-                    {
-                        Button(action: {
-//                            if selectedFiles.contains(file)
-//                            {
-//                                selectedFiles.remove(file)
-//                            }
-//                            else
-//                            {
-//                                selectedFiles.insert(file)
-//                            }
-                        })
+                // NavigationSplitView with list on left and detail on right
+                NavigationSplitView {
+                    // Left side: List of files
+                    List( mergedFileSetBySize.uniqueFiles, id: \.id, selection: $selectedFile)
+                    { file in
+                        HStack
                         {
-//                            Image(systemName: selectedFiles.contains(file) ? "checkmark.square.fill" : "square")
-//                                .foregroundColor(selectedFiles.contains(file) ? .accentColor : .secondary)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .accessibilityIdentifier("checkbox-file-\(file.id)")
-                        
-                        FileRowView(file: file)
-                            .onTapGesture {
-//                                selectedFile = file
+                            Button(action: {
+                                if selectedFiles.contains(file)
+                                {
+                                    selectedFiles.remove(file)
+                                }
+                                else
+                                {
+                                    selectedFiles.insert(file)
+                                }
+                            })
+                            {
+                                Image(systemName: selectedFiles.contains(file) ? "checkmark.square.fill" : "square")
+                                    .foregroundColor(selectedFiles.contains(file) ? .accentColor : .secondary)
                             }
+                            .buttonStyle(PlainButtonStyle())
+                            .accessibilityIdentifier("checkbox-file-\(file.id)")
+                            
+                            FileRowView(file: file)
+                        }
+                        .tag(file)
+                    }
+                    .listStyle(PlainListStyle())
+                    .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 600)
+                } detail: {
+                    // Right side: Detail view of selected file
+                    if let file = selectedFile {
+                        FileDetailViewContent(
+                            file: file,
+                            player: $player,
+                            isPlaying: $isPlaying,
+                            currentTime: $currentTime,
+                            duration: $duration,
+                            timer: $timer
+                        )
+                    } else {
+                        VStack(spacing: 12) {
+                            Image(systemName: "arrow.left")
+                                .font(.system(size: 48))
+                                .foregroundColor(.secondary)
+                            Text("Select a file to preview")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
-                .listStyle(PlainListStyle())
             } // there are files to move
         }
+    }
+
+
+    private func getDestinationURL( for file: MediaFile ) throws -> URL
+    {
+        guard let targetURL: URL = targetURL else {
+            fatalError("Target URL not set")
+        }
+
+        let components: DateComponents = calendar.dateComponents(
+            [.year, .month, .day]
+            , from: file.creationDate
+        )
+
+        let year: String = String(format: "%04d", components.year ?? 2000)
+        let month: String = String(format: "%02d", components.month ?? 1)
+        let day: String = String(format: "%02d", components.day ?? 1)
+
+        let mediaTypeFolder: String = file.mediaType.displayName
+
+        let destinationFolder: URL = targetURL
+            .appendingPathComponent(mediaTypeFolder)
+            .appendingPathComponent(year)
+            .appendingPathComponent(month)
+            .appendingPathComponent(day)
+
+        // Create directory structure if it doesn't exist
+        try fileManager.createDirectory( at: destinationFolder
+                                         , withIntermediateDirectories: true
+        )
+
+        return destinationFolder.appendingPathComponent(file.displayName)
+    }
+
+    private func moveFile(_ file: MediaFile, to destinationURL: URL) async throws
+    {
+        // Check if destination file already exists
+        if fileManager.fileExists(atPath: destinationURL.path)
+        {
+            // Generate unique filename
+            let filename = destinationURL.deletingPathExtension().lastPathComponent
+            let fileExtension = destinationURL.pathExtension
+            var counter = 1
+            var newDestinationURL = destinationURL
+
+            while fileManager.fileExists(atPath: newDestinationURL.path)
+            {
+                let newFilename = "\(filename)_\(counter).\(fileExtension)"
+                newDestinationURL = destinationURL.deletingLastPathComponent().appendingPathComponent(newFilename)
+                counter += 1
+            }
+
+            try fileManager.moveItem(at: file.fileUrl, to: newDestinationURL)
+        } else {
+            try fileManager.moveItem(at: file.fileUrl, to: destinationURL)
+        }
+    }
+
+
+
+    private func moveSelectedFiles(_ selectedFiles: [MediaFile]) async
+    {
+        guard !selectedFiles.isEmpty else { return }
+
+//        isProcessing = true
+//        processingState = .processing
+//        currentOperation = "Moving selected files..."
+//        progress = 0.0
+
+        let _ = selectedFiles.count
+        var movedCount = 0
+
+        for file in selectedFiles
+        {
+            do
+            {
+                let targetPath = try getDestinationURL(for: file)
+                try await moveFile(file, to: targetPath)
+                movedCount += 1
+//                progress = Double(movedCount) / Double(totalFiles)
+//                currentOperation = "Moved \(movedCount) of \(totalFiles) files..."
+            }
+            catch
+            {
+//                errorMessage = "Failed to move \(file.displayName): \(error.localizedDescription)"
+                break
+            }
+        }
+
+//        // Remove moved files from the filesToMove list
+//        filesToMove.removeAll { file in
+//            selectedFiles.contains { $0.id == file.id }
+//        }
+//
+//        isProcessing = false
+//        processingState = .done
+//        currentOperation = ""
+//        progress = 0.0
+    }
+        
+    
+    
+}
+
+// MARK: - File Detail View Content
+struct FileDetailViewContent: View {
+    let file: MediaFile
+    @Binding var player: AVPlayer?
+    @Binding var isPlaying: Bool
+    @Binding var currentTime: Double
+    @Binding var duration: Double
+    @Binding var timer: Timer?
+    
+    var body: some View {
+        Group {
+            // Determine which view to use based on file type
+            if file.mediaType == .photo {
+                // Check if it's a RAW photo
+                if isRAWPhoto(file.fileExtension) {
+                    RAWImageView(file: file)
+                } else {
+                    PhotoView(file: file)
+                }
+            } else if file.mediaType == .video {
+                // Check if it's a BRAW video
+                if file.fileExtension.lowercased() == "braw" {
+                    BRAWVideoView(
+                        file: file,
+                        player: $player,
+                        isPlaying: $isPlaying,
+                        currentTime: $currentTime,
+                        duration: $duration,
+                        timer: $timer
+                    )
+                } else {
+                    VideoView(
+                        file: file,
+                        player: $player,
+                        isPlaying: $isPlaying,
+                        currentTime: $currentTime,
+                        duration: $duration,
+                        timer: $timer
+                    )
+                }
+            } else if file.mediaType == .audio {
+                AudioView(
+                    file: file,
+                    player: $player,
+                    isPlaying: $isPlaying,
+                    currentTime: $currentTime,
+                    duration: $duration,
+                    timer: $timer
+                )
+            } else {
+                UnsupportedFileView(file: file)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private func isRAWPhoto(_ extension: String) -> Bool {
+        let rawExtensions = ["cr2", "cr3", "crw", "raw", "dng", "arw", "nef", "orf", "rw2", "rwz"]
+        return rawExtensions.contains(`extension`.lowercased())
     }
 }
 
@@ -105,6 +305,7 @@ struct FilesToMoveListView: View
 #Preview( "with files" )
 {
     @Previewable @State var statusMsg: String = "Ready to move files"
+    @Previewable @State var targetURL: URL? = URL(fileURLWithPath: "/Users/test/Target")
     @Previewable @State var mergedFileSetBySize: FileSetBySize = {
         let fileSet : FileSetBySize = FileSetBySize()
         
@@ -153,10 +354,11 @@ struct FilesToMoveListView: View
         
         return fileSet
     }()
-    
+
     FilesToMoveListView(
         statusMsg: $statusMsg,
-        mergedFileSetBySize: $mergedFileSetBySize
+        mergedFileSetBySize: $mergedFileSetBySize,
+        targetURL: $targetURL
     )
 }
 
@@ -164,21 +366,23 @@ struct FilesToMoveListView: View
 #Preview( "no files" )
 {
     @Previewable @State var statusMsg: String = "Ready to move files"
+    @Previewable @State var targetURL: URL? = URL(fileURLWithPath: "/Users/test/Target")
     @Previewable @State var mergedFileSetBySize: FileSetBySize = {
         let fileSet : FileSetBySize = FileSetBySize()
-        
+
         // Create some sample mock files of different types
         let mockFiles : [MediaFile] = []
-        
+
         // Add all mock files to the set
         fileSet.append(contentsOf: mockFiles)
-        
+
         return fileSet
     }()
-    
+
     FilesToMoveListView(
         statusMsg: $statusMsg,
-        mergedFileSetBySize: $mergedFileSetBySize
+        mergedFileSetBySize: $mergedFileSetBySize,
+        targetURL: $targetURL
     )
 }
 
