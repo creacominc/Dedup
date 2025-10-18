@@ -83,6 +83,31 @@ class MediaFile: Identifiable, Hashable
             return nil
         }
     }
+    
+    // Internal initializer for testing/preview purposes
+    internal init(
+        fileUrl: URL,
+        isDirectory: Bool,
+        fileSize: Int,
+        isMediaFile: Bool,
+        isUnique: Bool,
+        fileExtension: String,
+        mediaType: MediaType,
+        creationDate: Date,
+        modificationDate: Date,
+        isRegularFile: Bool
+    ) {
+        self.fileUrl = fileUrl
+        self.isDirectory = isDirectory
+        self.fileSize = fileSize
+        self.isMediaFile = isMediaFile
+        self.isUnique = isUnique
+        self.fileExtension = fileExtension
+        self.mediaType = mediaType
+        self.creationDate = creationDate
+        self.modificationDate = modificationDate
+        self.isRegularFile = isRegularFile
+    }
 
     public func computeChecksum( size: Int ) -> String
     {
@@ -109,3 +134,34 @@ class MediaFile: Identifiable, Hashable
     }
 
 }
+
+// MARK: - Preview Support
+#if DEBUG
+extension MediaFile {
+    /// Creates a mock MediaFile for preview/testing purposes
+    static func mock(
+        path: String,
+        size: Int,
+        isUnique: Bool = true,
+        fileExtension: String = "jpg",
+        mediaType: MediaType = .photo,
+        creationDate: Date = Date(),
+        modificationDate: Date = Date()
+    ) -> MediaFile {
+        let url = URL(fileURLWithPath: path)
+        let mockFile = MediaFile(
+            fileUrl: url,
+            isDirectory: false,
+            fileSize: size,
+            isMediaFile: true,
+            isUnique: isUnique,
+            fileExtension: fileExtension,
+            mediaType: mediaType,
+            creationDate: creationDate,
+            modificationDate: modificationDate,
+            isRegularFile: true
+        )
+        return mockFile
+    }
+}
+#endif

@@ -27,7 +27,7 @@ struct ContentView: View {
                                     mergedFileSetBySize: $mergedFileSetBySize )
                     .tabItem
                     {
-                        Label( "Unique", systemImage: "filemove.fill" )
+                        Label( "Unique", systemImage: "doc.fill" )
                     }
                     .tag(1)
 
@@ -36,7 +36,7 @@ struct ContentView: View {
                                     mergedFileSetBySize: $mergedFileSetBySize )
                     .tabItem
                     {
-                        Label( "Duplicates", systemImage: "copy.fill" )
+                        Label( "Duplicates", systemImage: "doc.on.doc.fill" )
                     }
                     .tag(2)
 
