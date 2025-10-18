@@ -2,7 +2,8 @@ import SwiftUI
 import AppKit
 
 struct UnsupportedFileView: View {
-    let file: FileInfo
+    let file: MediaFile
+    //    let file: FileInfo
     
     var body: some View {
         GeometryReader { geometry in
@@ -23,7 +24,7 @@ struct UnsupportedFileView: View {
                     .multilineTextAlignment(.center)
                 
                 Button(action: {
-                    NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+                    NSWorkspace.shared.selectFile(file.fileUrl.path, inFileViewerRootedAtPath: file.fileUrl.deletingLastPathComponent().path)
                 }) {
                     Label("Show in Finder", systemImage: "folder")
                 }

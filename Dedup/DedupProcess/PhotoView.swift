@@ -2,7 +2,8 @@ import SwiftUI
 import AppKit
 
 struct PhotoView: View {
-    let file: FileInfo
+    let file: MediaFile
+    //    let file: FileInfo
     @State private var image: NSImage?
     @State private var error: String?
     
@@ -20,7 +21,7 @@ struct PhotoView: View {
                         .foregroundColor(.secondary)
                     
                     Button(action: {
-                        NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+                        NSWorkspace.shared.selectFile(file.fileUrl.path, inFileViewerRootedAtPath: file.fileUrl.deletingLastPathComponent().path)
                     }) {
                         Label("Show in Finder", systemImage: "folder")
                     }
@@ -61,8 +62,8 @@ struct PhotoView: View {
     
     private func loadImage() {
         print("DEBUG: PhotoView - Starting to load image for: \(file.displayName)")
-        guard let image = NSImage(contentsOf: file.url) else {
-            print("DEBUG: PhotoView - Failed to load image from URL: \(file.url)")
+        guard let image = NSImage(contentsOf: file.fileUrl) else {
+            print("DEBUG: PhotoView - Failed to load image from URL: \(file.fileUrl)")
             error = "Could not load image"
             return
         }

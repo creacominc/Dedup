@@ -2,7 +2,8 @@ import SwiftUI
 import AppKit
 
 struct RAWImageView: View {
-    let file: FileInfo
+    let file: MediaFile
+    //    let file: FileInfo
     @State private var image: NSImage?
     @State private var error: String?
     @State private var isLoading = true
@@ -50,7 +51,7 @@ struct RAWImageView: View {
                                 }
                                 
                                 Button(action: {
-                                    NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+                                    NSWorkspace.shared.selectFile(file.fileUrl.path, inFileViewerRootedAtPath: file.fileUrl.deletingLastPathComponent().path)
                                 }) {
                                     Label("Show in Finder", systemImage: "folder")
                                 }
@@ -124,7 +125,7 @@ struct RAWImageView: View {
                                 .buttonStyle(.bordered)
                                 
                                 Button(action: {
-                                    NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+                                    NSWorkspace.shared.selectFile(file.fileUrl.path, inFileViewerRootedAtPath: file.fileUrl.deletingLastPathComponent().path)
                                 }) {
                                     Label("Show in Finder", systemImage: "folder")
                                 }
@@ -163,15 +164,15 @@ struct RAWImageView: View {
         isLoading = true
         
         // Validate file
-        guard file.url.isFileURL else {
-            print("DEBUG: RAWImageView - Invalid file URL: \(file.url)")
+        guard file.fileUrl.isFileURL else {
+            print("DEBUG: RAWImageView - Invalid file URL: \(file.fileUrl)")
             error = "Invalid file URL"
             isLoading = false
             return
         }
         
-        guard FileManager.default.fileExists(atPath: file.url.path) else {
-            print("DEBUG: RAWImageView - File does not exist: \(file.url.path)")
+        guard FileManager.default.fileExists(atPath: file.fileUrl.path) else {
+            print("DEBUG: RAWImageView - File does not exist: \(file.fileUrl.path)")
             error = "File does not exist"
             isLoading = false
             return
@@ -192,7 +193,7 @@ struct RAWImageView: View {
         print("DEBUG: RAWImageView - Extracting RAW metadata for: \(file.displayName)")
         
         // Use RAWSupport utility
-        if let metadata = await RAWSupport.shared.extractRAWMetadata(from: file.url) {
+        if let metadata = await RAWSupport.shared.extractRAWMetadata(from: file.fileUrl) {
             await MainActor.run {
                 self.rawMetadata = metadata
             }
@@ -206,7 +207,7 @@ struct RAWImageView: View {
         
         // Approach 1: Try with NSImage (might work with some RAW files)
         DispatchQueue.main.async {
-            if let loadedImage = NSImage(contentsOf: file.url) {
+            if let loadedImage = NSImage(contentsOf: file.fileUrl) {
                 print("DEBUG: RAWImageView - NSImage loaded successfully: \(file.displayName)")
                 self.image = loadedImage
                 self.isLoading = false
@@ -239,7 +240,7 @@ struct RAWImageView: View {
     private func tryFFmpegConversion() async {
         print("DEBUG: RAWImageView - Attempting FFmpeg conversion")
         
-        if let convertedURL = await RAWSupport.shared.convertRAWToJPEG(file.url) {
+        if let convertedURL = await RAWSupport.shared.convertRAWToJPEG(file.fileUrl) {
             await MainActor.run {
                 if let convertedImage = NSImage(contentsOf: convertedURL) {
                     self.image = convertedImage
@@ -259,7 +260,7 @@ struct RAWImageView: View {
     }
     
     private func openWithExternalViewer() {
-        RAWSupport.shared.openRAWFile(file.url)
+        RAWSupport.shared.openRAWFile(file.fileUrl)
     }
 }
 

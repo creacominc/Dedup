@@ -3,7 +3,8 @@ import AVKit
 import AppKit
 
 struct AudioView: View {
-    let file: FileInfo
+    let file: MediaFile
+    //    let file: FileInfo
     @Binding var player: AVPlayer?
     @Binding var isPlaying: Bool
     @Binding var currentTime: Double
@@ -33,7 +34,7 @@ struct AudioView: View {
                         .foregroundColor(.secondary)
                     
                     Button(action: {
-                        NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+                        NSWorkspace.shared.selectFile(file.fileUrl.path, inFileViewerRootedAtPath: file.fileUrl.deletingLastPathComponent().path)
                     }) {
                         Label("Show in Finder", systemImage: "folder")
                     }
@@ -128,16 +129,16 @@ struct AudioView: View {
         timer = nil
         
         // Add safety check for URL
-        guard file.url.isFileURL else {
-            print("DEBUG: AudioView - Invalid file URL: \(file.url)")
+        guard file.fileUrl.isFileURL else {
+            print("DEBUG: AudioView - Invalid file URL: \(file.fileUrl)")
             audioError = "Invalid file URL"
             isLoading = false
             return
         }
         
         // Check if file exists
-        guard FileManager.default.fileExists(atPath: file.url.path) else {
-            print("DEBUG: AudioView - File does not exist: \(file.url.path)")
+        guard FileManager.default.fileExists(atPath: file.fileUrl.path) else {
+            print("DEBUG: AudioView - File does not exist: \(file.fileUrl.path)")
             audioError = "File does not exist"
             isLoading = false
             return
@@ -145,7 +146,7 @@ struct AudioView: View {
         
         // Create AVPlayer with error handling
         DispatchQueue.main.async {
-            self.player = AVPlayer(url: file.url)
+            self.player = AVPlayer(url: file.fileUrl)
             print("DEBUG: AudioView - Player created for: \(file.displayName), player: \(self.player != nil)")
             
             // Verify player was created successfully
@@ -157,7 +158,7 @@ struct AudioView: View {
             }
             
             // Get duration
-            let asset = AVURLAsset(url: file.url)
+            let asset = AVURLAsset(url: file.fileUrl)
             Task {
                 do {
                     let duration = try await asset.load(.duration)

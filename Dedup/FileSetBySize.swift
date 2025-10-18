@@ -83,19 +83,32 @@ class FileSetBySize
         // print( "keys: \(fileSetsBySize.keys)" )
         return fileSetsBySize.keys.sorted()
     }
-    
+
     /// Iterates over files of a given size without copying the array
     func forEach(for size: Int, _ body: (MediaFile) throws -> Void) rethrows {
         if let files = fileSetsBySize[size] {
             try files.forEach(body)
         }
     }
-    
+
     /// Total count of all files across all sizes
-    var totalFileCount: Int {
+    var totalFileCount: Int
+    {
         fileSetsBySize.values.reduce(0) { $0 + $1.count }
     }
-    
+
+    /// Total count of unique files across all sizes
+    var totalUniqueFileCount: Int
+    {
+        fileSetsBySize.values.reduce(0) { $0 + $1.filter { $0.isUnique }.count }
+    }
+
+    /// Unique files
+    var uniqueFiles: [MediaFile]
+    {
+        fileSetsBySize.values.flatMap { $0.filter { $0.isUnique } }
+    }
+
     /// Returns only sizes that have multiple files (potential duplicates)
     var sizesWithMultipleFiles: [Int] {
         fileSetsBySize.filter { $0.value.count > 1 }.map { $0.key }

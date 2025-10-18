@@ -13,21 +13,33 @@ struct ContentView: View {
         {
             TabView(selection: $selectedTab)
             {
+                // file selection, stats, and processing
                 FileFinderView( statusMsg: $statusMsg,
                                 mergedFileSetBySize: $mergedFileSetBySize )
                     .tabItem
-                {
-                    Label("Finder", systemImage: "list.bullet")
-                }
-                .tag(0)
+                    {
+                        Label("Finder", systemImage: "list.bullet")
+                    }
+                    .tag(0)
 
-                DedupProcessView( statusMsg: $statusMsg,
-                                  mergedFileSetBySize: $mergedFileSetBySize )
+                // files to move
+                FilesToMoveListView( statusMsg: $statusMsg,
+                                    mergedFileSetBySize: $mergedFileSetBySize )
                     .tabItem
-                {
-                    Label("Dedup", systemImage: "key.fill")
-                }
-                .tag(1)
+                    {
+                        Label( "Unique", systemImage: "filemove.fill" )
+                    }
+                    .tag(1)
+
+                // duplicate files
+                DuplicatesListView( statusMsg: $statusMsg,
+                                    mergedFileSetBySize: $mergedFileSetBySize )
+                    .tabItem
+                    {
+                        Label( "Duplicates", systemImage: "copy.fill" )
+                    }
+                    .tag(2)
+
             } // tab view
 
             Text( statusMsg )

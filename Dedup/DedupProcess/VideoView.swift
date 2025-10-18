@@ -3,7 +3,8 @@ import AVKit
 import AppKit
 
 struct VideoView: View {
-    let file: FileInfo
+    let file: MediaFile
+    //    let file: FileInfo
     @Binding var player: AVPlayer?
     @Binding var isPlaying: Bool
     @Binding var currentTime: Double
@@ -46,7 +47,7 @@ struct VideoView: View {
                                     .foregroundColor(.secondary)
                                 
                                 Button(action: {
-                                    NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+                                    NSWorkspace.shared.selectFile(file.fileUrl.path, inFileViewerRootedAtPath: file.fileUrl.deletingLastPathComponent().path)
                                 }) {
                                     Label("Show in Finder", systemImage: "folder")
                                 }
@@ -80,7 +81,7 @@ struct VideoView: View {
                                     .foregroundColor(.secondary)
                                 
                                 Button(action: {
-                                    NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+                                    NSWorkspace.shared.selectFile(file.fileUrl.path, inFileViewerRootedAtPath: file.fileUrl.deletingLastPathComponent().path)
                                 }) {
                                     Label("Show in Finder", systemImage: "folder")
                                 }
@@ -126,16 +127,16 @@ struct VideoView: View {
         timer = nil
         
         // Add safety check for URL
-        guard file.url.isFileURL else {
-            print("DEBUG: VideoView - Invalid file URL: \(file.url)")
+        guard file.fileUrl.isFileURL else {
+            print("DEBUG: VideoView - Invalid file URL: \(file.fileUrl)")
             videoError = "Invalid file URL"
             isLoading = false
             return
         }
         
         // Check if file exists
-        guard FileManager.default.fileExists(atPath: file.url.path) else {
-            print("DEBUG: VideoView - File does not exist: \(file.url.path)")
+        guard FileManager.default.fileExists(atPath: file.fileUrl.path) else {
+            print("DEBUG: VideoView - File does not exist: \(file.fileUrl.path)")
             videoError = "File does not exist"
             isLoading = false
             return
@@ -145,7 +146,7 @@ struct VideoView: View {
         // Create the player on the main queue to avoid threading issues
         DispatchQueue.main.async {
             // Create AVPlayer with error handling
-            let playerItem = AVPlayerItem(url: file.url)
+            let playerItem = AVPlayerItem(url: file.fileUrl)
             self.player = AVPlayer(playerItem: playerItem)
             print("DEBUG: VideoView - Player created for: \(file.displayName), player: \(self.player != nil)")
             
@@ -171,7 +172,7 @@ struct VideoView: View {
             }
             
             // Get duration and set loading to false
-            let asset = AVURLAsset(url: file.url)
+            let asset = AVURLAsset(url: file.fileUrl)
             Task {
                 do {
                     let duration = try await asset.load(.duration)

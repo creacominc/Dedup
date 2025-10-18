@@ -3,7 +3,8 @@ import AVKit
 import AppKit
 
 struct BRAWVideoView: View {
-    let file: FileInfo
+    let file: MediaFile
+    //    let file: FileInfo
     @Binding var player: AVPlayer?
     @Binding var isPlaying: Bool
     @Binding var currentTime: Double
@@ -56,7 +57,7 @@ struct BRAWVideoView: View {
                                 }
                                 
                                 Button(action: {
-                                    NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+                                    NSWorkspace.shared.selectFile(file.fileUrl.path, inFileViewerRootedAtPath: file.fileUrl.deletingLastPathComponent().path)
                                 }) {
                                     Label("Show in Finder", systemImage: "folder")
                                 }
@@ -130,7 +131,7 @@ struct BRAWVideoView: View {
                                 .buttonStyle(.bordered)
                                 
                                 Button(action: {
-                                    NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+                                    NSWorkspace.shared.selectFile(file.fileUrl.path, inFileViewerRootedAtPath: file.fileUrl.deletingLastPathComponent().path)
                                 }) {
                                     Label("Show in Finder", systemImage: "folder")
                                 }
@@ -176,15 +177,15 @@ struct BRAWVideoView: View {
         timer = nil
         
         // Validate file
-        guard file.url.isFileURL else {
-            print("DEBUG: BRAWVideoView - Invalid file URL: \(file.url)")
+        guard file.fileUrl.isFileURL else {
+            print("DEBUG: BRAWVideoView - Invalid file URL: \(file.fileUrl)")
             videoError = "Invalid file URL"
             isLoading = false
             return
         }
         
-        guard FileManager.default.fileExists(atPath: file.url.path) else {
-            print("DEBUG: BRAWVideoView - File does not exist: \(file.url.path)")
+        guard FileManager.default.fileExists(atPath: file.fileUrl.path) else {
+            print("DEBUG: BRAWVideoView - File does not exist: \(file.fileUrl.path)")
             videoError = "File does not exist"
             isLoading = false
             return
@@ -205,7 +206,7 @@ struct BRAWVideoView: View {
         print("DEBUG: BRAWVideoView - Extracting BRAW metadata for: \(file.displayName)")
         
         // Use BRAWSupport utility
-        if let metadata = await BRAWSupport.shared.extractBRAWMetadata(from: file.url) {
+        if let metadata = await BRAWSupport.shared.extractBRAWMetadata(from: file.fileUrl) {
             await MainActor.run {
                 self.brawMetadata = metadata
             }
@@ -221,7 +222,7 @@ struct BRAWVideoView: View {
         
         // Approach 1: Try with AVPlayer (might work with some BRAW files)
         DispatchQueue.main.async {
-            let playerItem = AVPlayerItem(url: file.url)
+            let playerItem = AVPlayerItem(url: file.fileUrl)
             self.player = AVPlayer(playerItem: playerItem)
             
             // Add observer for player item status
@@ -284,7 +285,7 @@ struct BRAWVideoView: View {
     private func tryFFmpegConversion() async {
         print("DEBUG: BRAWVideoView - Attempting FFmpeg conversion")
         
-        if let convertedURL = await BRAWSupport.shared.convertBRAWToMP4(file.url) {
+        if let convertedURL = await BRAWSupport.shared.convertBRAWToMP4(file.fileUrl) {
             await MainActor.run {
                 // Create player with converted file
                 let playerItem = AVPlayerItem(url: convertedURL)
@@ -301,7 +302,7 @@ struct BRAWVideoView: View {
     }
     
     private func openWithExternalPlayer() {
-        BRAWSupport.shared.openBRAWFile(file.url)
+        BRAWSupport.shared.openBRAWFile(file.fileUrl)
     }
     
     private func cleanupPlayer() {

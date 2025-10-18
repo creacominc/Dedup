@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct DuplicateDetailView: View {
-    let sourceFile: FileInfo
-    let targetFiles: [FileInfo]
+    let sourceFile: MediaFile
+    let targetFiles: [MediaFile]
     
     var body: some View {
         HStack(spacing: 24) {
