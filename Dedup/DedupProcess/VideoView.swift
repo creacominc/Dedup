@@ -142,9 +142,8 @@ struct VideoView: View {
             return
         }
         
-        // Try to create AVPlayer for video with error handling
-        // Create the player on the main queue to avoid threading issues
-        DispatchQueue.main.async {
+        // Use Task to handle async player setup - avoid nested dispatch queues
+        Task { @MainActor in
             // Create AVPlayer with error handling
             let playerItem = AVPlayerItem(url: file.fileUrl)
             self.player = AVPlayer(playerItem: playerItem)
@@ -171,46 +170,28 @@ struct VideoView: View {
                 }
             }
             
-            // Get duration and set loading to false
+            // Get duration asynchronously
             let asset = AVURLAsset(url: file.fileUrl)
-            Task {
-                do {
-                    let duration = try await asset.load(.duration)
-                    await MainActor.run {
-                        self.duration = CMTimeGetSeconds(duration)
-                        self.isLoading = false
-                        print("DEBUG: VideoView - Video loaded successfully: \(file.displayName), duration: \(self.duration), player: \(self.player != nil)")
-                    }
-                } catch {
-                    await MainActor.run {
-                        self.videoError = "Could not load video duration: \(error.localizedDescription)"
-                        self.isLoading = false
-                        print("DEBUG: VideoView - Error loading video: \(error.localizedDescription)")
-                    }
-                }
-            }
-            
-            // Set loading to false after a short delay to ensure player is ready
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                Task { @MainActor in
-                    if self.player != nil && self.player?.currentItem != nil {
-                        self.isLoading = false
-                        print("DEBUG: VideoView - Player ready, setting loading to false")
-                    } else {
-                        print("DEBUG: VideoView - Player not ready, showing error")
-                        self.videoError = "Failed to initialize video player"
-                        self.isLoading = false
+            do {
+                let loadedDuration = try await asset.load(.duration)
+                // Update state in a single batch to avoid multiple layout passes
+                self.duration = CMTimeGetSeconds(loadedDuration)
+                self.isLoading = false
+                print("DEBUG: VideoView - Video loaded successfully: \(file.displayName), duration: \(self.duration), player: \(self.player != nil)")
+                
+                // Setup timer for progress updates after successful load
+                self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                    Task { @MainActor in
+                        if let player = self.player {
+                            self.currentTime = CMTimeGetSeconds(player.currentTime())
+                        }
                     }
                 }
-            }
-            
-            // Setup timer for progress updates
-            self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                Task { @MainActor in
-                    if let player = self.player {
-                        self.currentTime = CMTimeGetSeconds(player.currentTime())
-                    }
-                }
+                print("DEBUG: VideoView - Player ready, setting loading to false")
+            } catch {
+                self.videoError = "Could not load video: \(error.localizedDescription)"
+                self.isLoading = false
+                print("DEBUG: VideoView - Error loading video: \(error.localizedDescription)")
             }
         }
     }

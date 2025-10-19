@@ -9,10 +9,9 @@ struct FilesToMoveListView: View
     @Binding var targetURL: URL?
     @State var selectedFile: MediaFile? = nil
     
-    //    @ObservedObject var fileProcessor: FileProcessor
-    //    @Binding var selectedFile: MediaFile?
     @State private var selectedFiles: Set<MediaFile> = []
     @State private var selectAll: Bool = false
+    @State private var progress: Double = 0.0
     private let fileManager: FileManager = FileManager.default
     private let calendar: Calendar = Calendar.current
     
@@ -56,7 +55,7 @@ struct FilesToMoveListView: View
                         selectAll = false
                     }
                 }
-                .disabled( mergedFileSetBySize.totalUniqueFileCount == 0 )
+                .disabled( selectedFiles.count == 0 )
                 .accessibilityIdentifier("button-moveSelectedFiles")
             }
             .padding(.horizontal)
@@ -81,7 +80,8 @@ struct FilesToMoveListView: View
             else
             {
                 // NavigationSplitView with list on left and detail on right
-                NavigationSplitView {
+                NavigationSplitView
+                {
                     // Left side: List of files
                     List( mergedFileSetBySize.uniqueFiles, id: \.id, selection: $selectedFile)
                     { file in
@@ -110,9 +110,12 @@ struct FilesToMoveListView: View
                     }
                     .listStyle(PlainListStyle())
                     .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 600)
-                } detail: {
+                }
+                detail:
+                {
                     // Right side: Detail view of selected file
-                    if let file = selectedFile {
+                    if let file = selectedFile
+                    {
                         FileDetailViewContent(
                             file: file,
                             player: $player,
@@ -121,7 +124,9 @@ struct FilesToMoveListView: View
                             duration: $duration,
                             timer: $timer
                         )
-                    } else {
+                    }
+                    else
+                    {
                         VStack(spacing: 12) {
                             Image(systemName: "arrow.left")
                                 .font(.system(size: 48))
@@ -133,6 +138,11 @@ struct FilesToMoveListView: View
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
+
+                // Progress
+                ProgressView(value: progress, total: 1.0)
+                    .progressViewStyle(LinearProgressViewStyle())
+
             } // there are files to move
         }
     }
@@ -249,37 +259,42 @@ struct FileDetailViewContent: View {
     @Binding var timer: Timer?
     
     var body: some View {
+        MediaFileTypeView(
+            file: file,
+            player: $player,
+            isPlaying: $isPlaying,
+            currentTime: $currentTime,
+            duration: $duration,
+            timer: $timer
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Media File Type View
+private struct MediaFileTypeView: View {
+    let file: MediaFile
+    @Binding var player: AVPlayer?
+    @Binding var isPlaying: Bool
+    @Binding var currentTime: Double
+    @Binding var duration: Double
+    @Binding var timer: Timer?
+    
+    var body: some View {
         Group {
-            // Determine which view to use based on file type
-            if file.mediaType == .photo {
-                // Check if it's a RAW photo
-                if isRAWPhoto(file.fileExtension) {
-                    RAWImageView(file: file)
-                } else {
-                    PhotoView(file: file)
-                }
-            } else if file.mediaType == .video {
-                // Check if it's a BRAW video
-                if file.fileExtension.lowercased() == "braw" {
-                    BRAWVideoView(
-                        file: file,
-                        player: $player,
-                        isPlaying: $isPlaying,
-                        currentTime: $currentTime,
-                        duration: $duration,
-                        timer: $timer
-                    )
-                } else {
-                    VideoView(
-                        file: file,
-                        player: $player,
-                        isPlaying: $isPlaying,
-                        currentTime: $currentTime,
-                        duration: $duration,
-                        timer: $timer
-                    )
-                }
-            } else if file.mediaType == .audio {
+            switch file.mediaType {
+            case .photo:
+                PhotoTypeView(file: file)
+            case .video:
+                VideoTypeView(
+                    file: file,
+                    player: $player,
+                    isPlaying: $isPlaying,
+                    currentTime: $currentTime,
+                    duration: $duration,
+                    timer: $timer
+                )
+            case .audio:
                 AudioView(
                     file: file,
                     player: $player,
@@ -288,16 +303,64 @@ struct FileDetailViewContent: View {
                     duration: $duration,
                     timer: $timer
                 )
-            } else {
+            default:
                 UnsupportedFileView(file: file)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Photo Type View
+private struct PhotoTypeView: View {
+    let file: MediaFile
+    
+    var body: some View {
+        Group {
+            if isRAWPhoto(file.fileExtension) {
+                RAWImageView(file: file)
+            } else {
+                PhotoView(file: file)
+            }
+        }
     }
     
     private func isRAWPhoto(_ extension: String) -> Bool {
         let rawExtensions = ["cr2", "cr3", "crw", "raw", "dng", "arw", "nef", "orf", "rw2", "rwz"]
         return rawExtensions.contains(`extension`.lowercased())
+    }
+}
+
+// MARK: - Video Type View
+private struct VideoTypeView: View {
+    let file: MediaFile
+    @Binding var player: AVPlayer?
+    @Binding var isPlaying: Bool
+    @Binding var currentTime: Double
+    @Binding var duration: Double
+    @Binding var timer: Timer?
+    
+    var body: some View {
+        Group {
+            if file.fileExtension.lowercased() == "braw" {
+                BRAWVideoView(
+                    file: file,
+                    player: $player,
+                    isPlaying: $isPlaying,
+                    currentTime: $currentTime,
+                    duration: $duration,
+                    timer: $timer
+                )
+            } else {
+                VideoView(
+                    file: file,
+                    player: $player,
+                    isPlaying: $isPlaying,
+                    currentTime: $currentTime,
+                    duration: $duration,
+                    timer: $timer
+                )
+            }
+        }
     }
 }
 
@@ -385,4 +448,5 @@ struct FileDetailViewContent: View {
         targetURL: $targetURL
     )
 }
+
 

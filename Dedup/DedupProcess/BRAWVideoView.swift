@@ -219,9 +219,9 @@ struct BRAWVideoView: View {
         print("DEBUG: BRAWVideoView - Setting up BRAW playback for: \(file.displayName)")
         
         // Try multiple approaches for BRAW playback
-        
-        // Approach 1: Try with AVPlayer (might work with some BRAW files)
-        DispatchQueue.main.async {
+        // Use Task to avoid nested dispatch queues and layout recursion
+        Task { @MainActor in
+            // Approach 1: Try with AVPlayer (might work with some BRAW files)
             let playerItem = AVPlayerItem(url: file.fileUrl)
             self.player = AVPlayer(playerItem: playerItem)
             
@@ -237,15 +237,15 @@ struct BRAWVideoView: View {
                 }
             }
             
-            // Check if player is working
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                if self.player?.currentItem?.status == .failed {
-                    print("DEBUG: BRAWVideoView - AVPlayer failed, trying alternative methods")
-                    self.tryAlternativeBRAWPlayback()
-                } else {
-                    self.isLoading = false
-                    print("DEBUG: BRAWVideoView - AVPlayer working for BRAW file")
-                }
+            // Check if player is working after a delay
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+            
+            if self.player?.currentItem?.status == .failed {
+                print("DEBUG: BRAWVideoView - AVPlayer failed, trying alternative methods")
+                self.tryAlternativeBRAWPlayback()
+            } else {
+                self.isLoading = false
+                print("DEBUG: BRAWVideoView - AVPlayer working for BRAW file")
             }
         }
     }
