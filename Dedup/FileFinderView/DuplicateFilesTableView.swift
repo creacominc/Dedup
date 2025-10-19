@@ -33,24 +33,21 @@ struct DuplicateFilesTableView: View {
         // Access lastProcessed to ensure this computed property re-evaluates when uniqueness processing completes
         _ = fileSetBySize.lastProcessed
         
-        // Iterate through all file sizes
-        for (_, files) in fileSetBySize.fileSetsBySize {
-            // For each file in this size group
-            for file in files {
-                // Only include files that are not marked as unique
-                if !file.isUnique && file.checksums.count >= 1 {
-                    // Find the maximum checksum size
-                    let maxSize = file.checksums.keys.max() ?? 0
-                    let checksumAtMax = file.checksums[maxSize] ?? ""
-                    
-                    rows.append(DuplicateFileRow(
-                        fileName: file.fileUrl.lastPathComponent,
-                        filePath: file.fileUrl.path,
-                        maxChecksumSize: maxSize,
-                        checksumAtMaxSize: checksumAtMax,
-                        fileSize: file.fileSize
-                    ))
-                }
+        // Use efficient iteration method to avoid copying arrays
+        fileSetBySize.forEachFile { file in
+            // Only include files that are not marked as unique
+            if !file.isUnique && file.checksums.count >= 1 {
+                // Find the maximum checksum size
+                let maxSize = file.checksums.keys.max() ?? 0
+                let checksumAtMax = file.checksums[maxSize] ?? ""
+                
+                rows.append(DuplicateFileRow(
+                    fileName: file.fileUrl.lastPathComponent,
+                    filePath: file.fileUrl.path,
+                    maxChecksumSize: maxSize,
+                    checksumAtMaxSize: checksumAtMax,
+                    fileSize: file.fileSize
+                ))
             }
         }
         

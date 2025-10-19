@@ -213,9 +213,6 @@ struct FilesToMoveListView: View
         ) async
     {
         guard !selectedFiles.isEmpty else { return }
-
-//        isProcessing = true
-//        processingState = .processing
         statusMsg = "Moving selected files..."
         progress = 0.0
 
@@ -244,16 +241,8 @@ struct FilesToMoveListView: View
                 break
             }
         }
-
-//        // Remove moved files from the filesToMove list
-//        filesToMove.removeAll { file in
-//            selectedFiles.contains { $0.id == file.id }
-//        }
-//
-//        isProcessing = false
-//        processingState = .done
-//        currentOperation = ""
-//        progress = 0.0
+        statusMsg = "Moved \(movedCount) of \(totalFiles) files..."
+        progress = 0.0
     }
         
     
