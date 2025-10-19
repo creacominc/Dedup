@@ -44,13 +44,16 @@ struct FilesToMoveListView: View
                         selectedFiles = Set( mergedFileSetBySize.uniqueFiles.map(\.self)
                         )
                         selectAll = true
+                        statusMsg = "Selected \( selectedFiles.count ) files."
                     }
                 }
                 .disabled( mergedFileSetBySize.totalUniqueFileCount == 0 )
                 .accessibilityIdentifier("button-selectAllFiles")
-                Button("Move Selected") {
+                Button("Move \( selectedFiles.count ) Files") {
                     Task {
-                        await moveSelectedFiles(Array(selectedFiles))
+                        await moveSelectedFiles(Array(selectedFiles)
+                                                , mergedFileSetBySize : mergedFileSetBySize
+                        )
                         selectedFiles.removeAll()
                         selectAll = false
                     }
@@ -205,16 +208,18 @@ struct FilesToMoveListView: View
 
 
 
-    private func moveSelectedFiles(_ selectedFiles: [MediaFile]) async
+    private func moveSelectedFiles(_ selectedFiles: [MediaFile]
+                                   , mergedFileSetBySize : FileSetBySize
+        ) async
     {
         guard !selectedFiles.isEmpty else { return }
 
 //        isProcessing = true
 //        processingState = .processing
-//        currentOperation = "Moving selected files..."
-//        progress = 0.0
+        statusMsg = "Moving selected files..."
+        progress = 0.0
 
-        let _ = selectedFiles.count
+        let totalFiles = selectedFiles.count
         var movedCount = 0
 
         for file in selectedFiles
@@ -224,12 +229,18 @@ struct FilesToMoveListView: View
                 let targetPath = try getDestinationURL(for: file)
                 try await moveFile(file, to: targetPath)
                 movedCount += 1
-//                progress = Double(movedCount) / Double(totalFiles)
-//                currentOperation = "Moved \(movedCount) of \(totalFiles) files..."
+                progress = Double(movedCount) / Double(totalFiles)
+                // remove this file from the mergeFileSetBySeze collection
+                mergedFileSetBySize.remove( mediaFile: file )
+                // every 10th of the total files, update statusMsg
+                if movedCount.isMultiple(of: 10)
+                {
+                    statusMsg = "Moved \(movedCount) of \(totalFiles) files..."
+                }
             }
             catch
             {
-//                errorMessage = "Failed to move \(file.displayName): \(error.localizedDescription)"
+                statusMsg = "Failed to move \(file.displayName): \(error.localizedDescription)"
                 break
             }
         }

@@ -51,7 +51,14 @@ class FileSetBySize
         fileSetsBySize.removeAll()
         lastModified = Date()
     }
-    
+
+    func remove( mediaFile: MediaFile )
+    {
+        fileSetsBySize[ mediaFile.fileSize ]?.removeAll { $0.id == mediaFile.id }
+        lastModified = Date()
+    }
+
+
     /// Replaces all contents with another FileSetBySize - O(1) operation
     func replaceAll(with other: FileSetBySize) {
         print("replaceAll called: replacing \(self.totalFileCount) files with \(other.totalFileCount) files")
