@@ -386,42 +386,42 @@ private func createPreviewFileSet() -> FileSetBySize {
         path: "/Users/test/Photos/IMG_1234.jpg",
         size: 2_456_789,
         fileExtension: "jpg",
-        mediaType: .photo
+        mediaType: MediaType.photo
     )
     
     let file2 = MediaFile.mock(
         path: "/Users/test/Videos/vacation_2024.mov",
         size: 125_456_789,
         fileExtension: "mov",
-        mediaType: .video
+        mediaType: MediaType.video
     )
     
     let file3 = MediaFile.mock(
         path: "/Users/test/Photos/RAW/DSC_5678.dng",
         size: 45_123_456,
         fileExtension: "dng",
-        mediaType: .photo
+        mediaType: MediaType.photo
     )
     
     let file4 = MediaFile.mock(
         path: "/Users/test/Videos/wedding.mp4",
         size: 89_234_567,
         fileExtension: "mp4",
-        mediaType: .video
+        mediaType: MediaType.video
     )
     
     let file5 = MediaFile.mock(
         path: "/Users/test/Photos/BRAW/clip_001.braw",
         size: 234_567_890,
         fileExtension: "braw",
-        mediaType: .video
+        mediaType: MediaType.video
     )
     
     let file6 = MediaFile.mock(
         path: "/Users/test/Photos/sunset.cr2",
         size: 28_901_234,
         fileExtension: "cr2",
-        mediaType: .photo
+        mediaType: MediaType.photo
     )
     
     let mockFiles: [MediaFile] = [file1, file2, file3, file4, file5, file6]
