@@ -4,7 +4,6 @@ import AppKit
 struct FileRowView: View
 {
     let file: MediaFile
-    //    let file: FileInfo
     
     var body: some View
     {
@@ -20,7 +19,7 @@ struct FileRowView: View
                 Text(file.displayName)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                
+
                 Text(file.fileUrl.path)
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -35,14 +34,14 @@ struct FileRowView: View
                         .padding(.vertical, 2)
                         .background(mediaTypeColor.opacity(0.2))
                         .cornerRadius(4)
-
-                    Text( String(file.fileSize) )
+                    Spacer()
+                    Text( "Size: \(file.fileSize)" )
                         .font(.caption)
                         .foregroundColor(.secondary)
-
-//                    Text(file.formattedCreationDate)
-//                        .font(.caption)
-//                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(file.formattedCreationDate)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
             

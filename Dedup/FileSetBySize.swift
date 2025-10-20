@@ -214,10 +214,10 @@ class FileSetBySize
 
     // get bytes needed to determine uniqueness of all files in all sets
     // return a map of file sizes and the bytes needed to ensure uniqueness
-    public func getBytesNeededForUniqueness(currentLevel: @escaping (Int) -> Void = { _ in }, 
-                                           maxLevel: @escaping (Int) -> Void = { _ in },
-                                           shouldCancel: @escaping () -> Bool = { false },
-                                            updateStatus: @escaping (String) -> Void = { _ in }
+    public func getBytesNeededForUniqueness(currentLevel: @escaping @Sendable (Int) -> Void = { _ in }, 
+                                           maxLevel: @escaping @Sendable (Int) -> Void = { _ in },
+                                           shouldCancel: @escaping @Sendable () -> Bool = { false },
+                                            updateStatus: @escaping @Sendable (String) -> Void = { _ in }
                                             ) -> [Int:Int]
     {
         // map to be returned.

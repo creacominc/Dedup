@@ -325,7 +325,7 @@ private struct PhotoTypeView: View {
     }
     
     private func isRAWPhoto(_ extension: String) -> Bool {
-        let rawExtensions = ["cr2", "cr3", "crw", "raw", "dng", "arw", "nef", "orf", "rw2", "rwz"]
+        let rawExtensions: [String] = ["cr2", "cr3", "crw", "raw", "dng", "arw", "nef", "orf", "rw2", "rwz"]
         return rawExtensions.contains(`extension`.lowercased())
     }
 }
@@ -369,54 +369,7 @@ private struct VideoTypeView: View {
 {
     @Previewable @State var statusMsg: String = "Ready to move files"
     @Previewable @State var targetURL: URL? = URL(fileURLWithPath: "/Users/test/Target")
-    @Previewable @State var mergedFileSetBySize: FileSetBySize = {
-        let fileSet : FileSetBySize = FileSetBySize()
-        
-        // Create some sample mock files of different types
-        let mockFiles : [MediaFile] = [
-            MediaFile.mock(
-                path: "/Users/test/Photos/IMG_1234.jpg",
-                size: 2_456_789,
-                fileExtension: "jpg",
-                mediaType: .photo
-            ),
-            MediaFile.mock(
-                path: "/Users/test/Videos/vacation_2024.mov",
-                size: 125_456_789,
-                fileExtension: "mov",
-                mediaType: .video
-            ),
-            MediaFile.mock(
-                path: "/Users/test/Photos/RAW/DSC_5678.dng",
-                size: 45_123_456,
-                fileExtension: "dng",
-                mediaType: .photo
-            ),
-            MediaFile.mock(
-                path: "/Users/test/Videos/wedding.mp4",
-                size: 89_234_567,
-                fileExtension: "mp4",
-                mediaType: .video
-            ),
-            MediaFile.mock(
-                path: "/Users/test/Photos/BRAW/clip_001.braw",
-                size: 234_567_890,
-                fileExtension: "braw",
-                mediaType: .video
-            ),
-            MediaFile.mock(
-                path: "/Users/test/Photos/sunset.cr2",
-                size: 28_901_234,
-                fileExtension: "cr2",
-                mediaType: .photo
-            )
-        ]
-        
-        // Add all mock files to the set
-        fileSet.append(contentsOf: mockFiles)
-        
-        return fileSet
-    }()
+    @Previewable @State var mergedFileSetBySize: FileSetBySize = createPreviewFileSet()
 
     FilesToMoveListView(
         statusMsg: $statusMsg,
@@ -425,22 +378,64 @@ private struct VideoTypeView: View {
     )
 }
 
+private func createPreviewFileSet() -> FileSetBySize {
+    let fileSet = FileSetBySize()
+    
+    // Create mock files one at a time to avoid complex expressions
+    let file1 = MediaFile.mock(
+        path: "/Users/test/Photos/IMG_1234.jpg",
+        size: 2_456_789,
+        fileExtension: "jpg",
+        mediaType: .photo
+    )
+    
+    let file2 = MediaFile.mock(
+        path: "/Users/test/Videos/vacation_2024.mov",
+        size: 125_456_789,
+        fileExtension: "mov",
+        mediaType: .video
+    )
+    
+    let file3 = MediaFile.mock(
+        path: "/Users/test/Photos/RAW/DSC_5678.dng",
+        size: 45_123_456,
+        fileExtension: "dng",
+        mediaType: .photo
+    )
+    
+    let file4 = MediaFile.mock(
+        path: "/Users/test/Videos/wedding.mp4",
+        size: 89_234_567,
+        fileExtension: "mp4",
+        mediaType: .video
+    )
+    
+    let file5 = MediaFile.mock(
+        path: "/Users/test/Photos/BRAW/clip_001.braw",
+        size: 234_567_890,
+        fileExtension: "braw",
+        mediaType: .video
+    )
+    
+    let file6 = MediaFile.mock(
+        path: "/Users/test/Photos/sunset.cr2",
+        size: 28_901_234,
+        fileExtension: "cr2",
+        mediaType: .photo
+    )
+    
+    let mockFiles: [MediaFile] = [file1, file2, file3, file4, file5, file6]
+    fileSet.append(contentsOf: mockFiles)
+    
+    return fileSet
+}
+
 
 #Preview( "no files" )
 {
     @Previewable @State var statusMsg: String = "Ready to move files"
     @Previewable @State var targetURL: URL? = URL(fileURLWithPath: "/Users/test/Target")
-    @Previewable @State var mergedFileSetBySize: FileSetBySize = {
-        let fileSet : FileSetBySize = FileSetBySize()
-
-        // Create some sample mock files of different types
-        let mockFiles : [MediaFile] = []
-
-        // Add all mock files to the set
-        fileSet.append(contentsOf: mockFiles)
-
-        return fileSet
-    }()
+    @Previewable @State var mergedFileSetBySize: FileSetBySize = FileSetBySize()
 
     FilesToMoveListView(
         statusMsg: $statusMsg,

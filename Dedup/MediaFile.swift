@@ -23,15 +23,15 @@ class MediaFile: Identifiable, Hashable
     let creationDate: Date
     let modificationDate: Date
     let isRegularFile: Bool
-
+    
     static func == (lhs: MediaFile, rhs: MediaFile) -> Bool {
         lhs.id == rhs.id
     }
-
+    
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
-
+    
     init?( fileUrl: URL )
     {
         do
@@ -42,7 +42,7 @@ class MediaFile: Identifiable, Hashable
                           , .creationDateKey, .contentModificationDateKey
                          ])
             self.isDirectory = resourceValues.isDirectory ?? false
-
+            
             self.fileUrl = fileUrl
             self.fileSize = resourceValues.fileSize ?? 0
             self.fileExtension = fileUrl.pathExtension.lowercased()
@@ -54,7 +54,7 @@ class MediaFile: Identifiable, Hashable
             // is newer than the modification date
             self.creationDate = min( self.modificationDate, resourceValues.creationDate ?? Date() )
             
-
+            
             // Check if file is a media file (audio, video, or image)
             self.isMediaFile = false
             if let contentType = resourceValues.contentType
@@ -108,7 +108,7 @@ class MediaFile: Identifiable, Hashable
         self.modificationDate = modificationDate
         self.isRegularFile = isRegularFile
     }
-
+    
     public func computeChecksum( size: Int ) -> String
     {
         do
@@ -126,11 +126,18 @@ class MediaFile: Identifiable, Hashable
         }
         return checksums[size, default: ""]
     }
-
+    
     // Computed properties
     var displayName: String
     {
         return self.fileUrl.lastPathComponent
+    }
+    
+    var formattedCreationDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string( from: creationDate )
     }
 
 }
