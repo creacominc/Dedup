@@ -27,6 +27,7 @@
 		36AD7C2F2E1A0A85000C222A /* Dedup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dedup.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		36AD7C3F2E1A0A87000C222A /* DedupTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DedupTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		36AD7C492E1A0A87000C222A /* DedupUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DedupUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		36E332A22EA651650048D795 /* Dedup.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dedup.xctestplan; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -88,6 +89,7 @@
 		36AD7C262E1A0A85000C222A = {
 			isa = PBXGroup;
 			children = (
+				36E332A22EA651650048D795 /* Dedup.xctestplan */,
 				36AD7C312E1A0A85000C222A /* Dedup */,
 				36AD7C422E1A0A87000C222A /* DedupTests */,
 				36AD7C4C2E1A0A87000C222A /* DedupUITests */,

@@ -1,0 +1,38 @@
+{
+  "configurations" : [
+    {
+      "id" : "4D87900F-E041-45F4-BF42-C8C439E71CA3",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "performanceAntipatternCheckerEnabled" : true,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:Dedup.xcodeproj",
+      "identifier" : "36AD7C2E2E1A0A85000C222A",
+      "name" : "Dedup"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:Dedup.xcodeproj",
+        "identifier" : "36AD7C3E2E1A0A87000C222A",
+        "name" : "DedupTests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:Dedup.xcodeproj",
+        "identifier" : "36AD7C482E1A0A87000C222A",
+        "name" : "DedupUITests"
+      }
+    }
+  ],
+  "version" : 1
+}
