@@ -9,7 +9,7 @@ import Foundation
 
 // class representing a map of sets of files collected by size
 @Observable
-class FileSetBySize
+class FileSetBySize: @unchecked Sendable
 {
     private(set) var fileSetsBySize: [Int: [MediaFile]] = [:]
     private(set) var lastModified: Date = Date()

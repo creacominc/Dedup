@@ -71,25 +71,39 @@ struct ChecksumSizeDistribution: View
                         // Clear previous results when starting new processing
                         bytesNeededBySize = [:]
                         
+                        // Capture the fileSetBySize to use in background thread
+                        let fileSetBySizeCapture: FileSetBySize = fileSetBySize
+                        
                         // Process on background thread to keep UI responsive
                         DispatchQueue.global(qos: .userInitiated).async
                         {
                             // bytes needed for uniqueness as a percent of size
-                            let results = fileSetBySize.getBytesNeededForUniqueness(
+                            let results: [Int : Int] = fileSetBySizeCapture.getBytesNeededForUniqueness(
                                     currentLevel: { level in
-                                        self.currentLevel = level
+                                        DispatchQueue.main.async {
+                                            self.currentLevel = level
+                                        }
                                     },
                                     maxLevel: { max in
-                                        self.maxLevel = max
+                                        DispatchQueue.main.async {
+                                            self.maxLevel = max
+                                        }
                                     },
                                     shouldCancel: {
-                                        return self.shouldCancel
+                                        // Access shouldCancel through main thread synchronously
+                                        var cancelled: Bool = false
+                                        DispatchQueue.main.sync {
+                                            cancelled = self.shouldCancel
+                                        }
+                                        return cancelled
                                     },
-                                    updateStatus: {
-                                        self.statusMsg = $0
-                                        print(
-                                            "Status Msg update: \(statusMsg)"
-                                        )
+                                    updateStatus: { status in
+                                        DispatchQueue.main.async {
+                                            self.statusMsg = status
+                                            print(
+                                                "Status Msg update: \(self.statusMsg)"
+                                            )
+                                        }
                                     }
                                 )
                             
