@@ -364,7 +364,7 @@ private struct VideoTypeView: View {
     }
 }
 
-
+#if DEBUG
 #Preview( "with files" )
 {
     @Previewable @State var statusMsg: String = "Ready to move files"
@@ -443,5 +443,5 @@ private func createPreviewFileSet() -> FileSetBySize {
         targetURL: $targetURL
     )
 }
-
+#endif
 
