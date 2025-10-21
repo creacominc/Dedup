@@ -118,15 +118,18 @@ class MediaFile: Identifiable, Hashable
         
         do
         {
-            let fileHandle = try FileHandle( forReadingFrom: fileUrl )
-            defer { try? fileHandle.close() }
-            if let data = try fileHandle.read(upToCount: size)
+            var fileHandle: FileHandle? = try? FileHandle( forReadingFrom: fileUrl )
+            defer { try? fileHandle?.close() }
+            if let data = try fileHandle?.read(upToCount: size)
             {
                 // MEMORY FIX: Compute hash more efficiently
                 let hash = SHA256.hash(data: data)
                 let hashString = hash.compactMap { String(format: "%02x", $0) }.joined()
                 checksums[size] = hashString
                 // Data object is released here automatically when it goes out of scope
+                // but let's be explicit to try to free up memory.
+                try? fileHandle?.close()
+                fileHandle = nil
             }
         }
         catch(let e)
