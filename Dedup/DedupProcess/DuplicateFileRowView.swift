@@ -3,13 +3,12 @@ import AppKit
 
 struct DuplicateFileRowView: View
 {
-//    let group: DuplicateGroup
-//    @ObservedObject var fileProcessor: FileProcessor
-    
+    // [out] statusMsg - update with status
+    @Binding var statusMsg: String
+    @Binding var duplicates: [MediaFile]
+
     var body: some View
     {
-//        let file = group.source
-//        let targetDuplicates = group.targets
         HStack(spacing: 12)
         {
 //            Image(systemName: iconName(for: file))
@@ -116,3 +115,12 @@ struct DuplicateFileRowView: View
     }
 }
 
+
+#Preview
+{
+    @Previewable @State var statusMsg: String = "testing  ..."
+    @Previewable @State var duplicates: [MediaFile] = []
+    DuplicateFileRowView( statusMsg: $statusMsg
+                        , duplicates:  $duplicates
+    )
+}

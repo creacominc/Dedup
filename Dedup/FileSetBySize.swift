@@ -134,6 +134,12 @@ class FileSetBySize: @unchecked Sendable
         fileSetsBySize.values.flatMap { $0.filter { $0.isUnique } }
     }
 
+    /// Duplicate files
+    var duplicateFiles: [MediaFile]
+    {
+        fileSetsBySize.values.flatMap { $0.filter { $0.isUnique == false } }
+    }
+
     /// Returns only sizes that have multiple files (potential duplicates)
     var sizesWithMultipleFiles: [Int] {
         fileSetsBySize.filter { $0.value.count > 1 }.map { $0.key }

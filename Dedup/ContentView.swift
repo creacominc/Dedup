@@ -38,7 +38,8 @@ struct ContentView: View {
 
                 // duplicate files
                 DuplicatesListView( statusMsg: $statusMsg,
-                                    mergedFileSetBySize: $mergedFileSetBySize )
+                                    mergedFileSetBySize: $mergedFileSetBySize,
+                                    targetURL: $targetURL )
                     .tabItem
                     {
                         Label( "Duplicates", systemImage: "doc.on.doc.fill" )
