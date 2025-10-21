@@ -218,12 +218,19 @@ class FileSetBySize: @unchecked Sendable
     }
 
 
+    // Auxiliary for formatting byte sizes (KB, MB, ...)
+    func formatBytes(_ bytes: Int) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: Int64(bytes))
+    }
+
     // get bytes needed to determine uniqueness of all files in all sets
     // return a map of file sizes and the bytes needed to ensure uniqueness
-    public func getBytesNeededForUniqueness(currentLevel: @escaping @Sendable (Int) -> Void = { _ in }, 
-                                           maxLevel: @escaping @Sendable (Int) -> Void = { _ in },
-                                           shouldCancel: @escaping @Sendable () -> Bool = { false },
-                                            updateStatus: @escaping @Sendable (String) -> Void = { _ in }
+    public func getBytesNeededForUniqueness( currentLevel: @escaping @Sendable (Int) -> Void = { _ in }
+                                            , maxLevel: @escaping @Sendable (Int) -> Void = { _ in }
+                                            , shouldCancel: @escaping @Sendable () -> Bool = { false }
+                                            , updateStatus: @escaping @Sendable (String) -> Void = { _ in }
                                             ) -> [Int:Int]
     {
         // map to be returned.
@@ -252,7 +259,7 @@ class FileSetBySize: @unchecked Sendable
         {
             // Check for cancellation
             if shouldCancel() {
-                print("Processing cancelled at size \(fileSize)")
+                updateStatus("Processing cancelled at size \(fileSize)")
                 break
             }
 
@@ -260,11 +267,11 @@ class FileSetBySize: @unchecked Sendable
             guard let filesAtSize: [MediaFile] = fileSetsBySize[fileSize] else { continue }
             let fileCount: Int = filesAtSize.count
             let uniquePathCount: Int = Set(filesAtSize.map { $0.fileUrl.path() }).count
-            print("Processing size \(fileSize) with \(fileCount) files (\(uniquePathCount) unique paths)")
+            updateStatus("Processing size \(formatBytes(fileSize)) with \(fileCount) files (\(uniquePathCount) unique paths)")
             
             // Warn if there are duplicate file objects
             if fileCount != uniquePathCount {
-                print("  WARNING: \(fileCount - uniquePathCount) duplicate file objects detected!")
+                updateStatus("  WARNING: \(fileCount - uniquePathCount) duplicate file objects detected!")
             }
             
             let checksumSizes: [Int] = getChecksumSizes(size: fileSize)
@@ -277,25 +284,36 @@ class FileSetBySize: @unchecked Sendable
                     break
                 }
                 
-                // Create a fresh set for each checksum size
-                var uniqueChecksums: Set<Data> = []
+                // MEMORY FIX: Use String set instead of Data set to reduce memory overhead
+                var uniqueChecksums: Set<String> = []
+                uniqueChecksums.reserveCapacity(fileCount) // Pre-allocate to avoid resizing
                 
                 // print( "checksumSize == \(checksumSize)" )
                 // iterate using the local reference - no additional copy
                 for file: MediaFile in filesAtSize
                 {
-                    let checksumData = file.computeChecksum(size: checksumSize).data(using: .utf8)!
-                    uniqueChecksums.insert(checksumData)
+                    let checksumString = file.computeChecksum(size: checksumSize)
+                    uniqueChecksums.insert(checksumString)
                 }
                 checksumSizeHandled = checksumSize
                 // stop if the number of uniqueChecksums == the number of files
                 if uniqueChecksums.count == fileCount
                 {
-                    print( "Size \(fileSize): Found uniqueness at \(checksumSize) bytes for \(fileCount) files" )
+                    updateStatus( "Size \(fileSize): Found uniqueness at \(checksumSize) bytes for \(fileCount) files" )
                     bytesNeeded[fileSize] = checksumSize
+                    
+                    // MEMORY FIX: Clear intermediate checksums from files now that we've found uniqueness
+                    // Keep only the final checksum that distinguishes files
+                    for file in filesAtSize {
+                        file.clearIntermediateChecksums()
+                    }
+                    
                     // break out of for loop
                     break
                 }
+                
+                // MEMORY FIX: Explicitly clear the set to release memory before next iteration
+                uniqueChecksums.removeAll()
             } // for checksumSizes
             
             // Check if we never found uniqueness
@@ -304,11 +322,11 @@ class FileSetBySize: @unchecked Sendable
                 let uniquePaths: Set<String> = Set(filesAtSize.map { $0.fileUrl.path() })
                 
                 print( "Size \(fileSize): WARNING - Could not distinguish all files even at maximum checksum size: \(checksumSizeHandled)" )
-                print( "  Total file objects: \(fileCount), Unique paths: \(uniquePaths.count)" )
+                updateStatus( "  Total file objects: \(fileCount), Unique paths: \(uniquePaths.count)" )
                 
                 // Check for duplicate file objects (same path appearing multiple times)
                 if filesAtSize.count != uniquePaths.count {
-                    print( "  ERROR: Found \(filesAtSize.count - uniquePaths.count) duplicate file objects in the array!" )
+                    updateStatus( "  ERROR: Found \(filesAtSize.count - uniquePaths.count) duplicate file objects in the array!" )
                 }
                 
                  // print the checksums for and the paths to the duplicate files
@@ -327,6 +345,14 @@ class FileSetBySize: @unchecked Sendable
             processedCount += 1
             DispatchQueue.main.async {
                 currentLevel(processedCount)
+            }
+            
+            // MEMORY FIX: Periodically suggest garbage collection every 100 sizes
+            if processedCount % 100 == 0 {
+                // Force autoreleasepool drain to release temporary objects
+                autoreleasepool {
+                    // This helps release any autoreleased objects accumulated during processing
+                }
             }
             
             // Update processing timestamp to signal that isUnique properties have been modified

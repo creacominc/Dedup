@@ -58,8 +58,8 @@ struct FileFinderView: View
             )
 
             // progress bar
-            ProgressBarView( currentLevel: $currentLevel,
-                             maxLevel: $maxLevel )
+            ProgressBarView( currentLevel: $currentLevel
+                             , maxLevel: $maxLevel )
 
 
             // file extensions handled

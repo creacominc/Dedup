@@ -27,6 +27,10 @@ struct DuplicatesListView: View
     @State private var selectedGroup: DuplicateGroup?
     @State private var selectedGroups: Set<DuplicateGroup> = []
     
+    // MEMORY FIX: Cache computed duplicate groups to avoid recreating on every render
+    @State private var cachedDuplicateGroups: [DuplicateGroup] = []
+    @State private var lastProcessedDate: Date = .distantPast
+    
     // State for media player
     @State private var player: AVPlayer?
     @State private var isPlaying: Bool = false
@@ -37,14 +41,25 @@ struct DuplicatesListView: View
     private let fileManager = FileManager.default
     private let calendar = Calendar.current
     
-    // Computed property to group duplicates by their final (largest) checksum
+    // MEMORY FIX: Computed property to group duplicates by their final (largest) checksum
+    // Now uses cached result to avoid recreating arrays on every render
     private var duplicateGroups: [DuplicateGroup] {
-        let duplicates = mergedFileSetBySize.duplicateFiles
-        
-        // Group by final checksum (the largest key in the checksums dictionary)
+        // Check if we need to recompute (data has changed)
+        if lastProcessedDate < mergedFileSetBySize.lastProcessed {
+            recomputeDuplicateGroups()
+        }
+        return cachedDuplicateGroups
+    }
+    
+    // MEMORY FIX: Separate function to recompute duplicate groups only when needed
+    private func recomputeDuplicateGroups() {
+        // Use direct iteration to avoid creating intermediate arrays
         var groups: [String: [MediaFile]] = [:]
         
-        for file in duplicates {
+        // Iterate directly over fileSetsBySize to avoid creating duplicateFiles array
+        mergedFileSetBySize.forEachFile { file in
+            guard !file.isUnique else { return }
+            
             // Get the final checksum (largest checksum size)
             if let maxChecksumKey = file.checksums.keys.max(),
                let checksum = file.checksums[maxChecksumKey] {
@@ -53,12 +68,14 @@ struct DuplicatesListView: View
         }
         
         // Convert to DuplicateGroup array and filter groups with more than 1 file
-        return groups.compactMap { checksum, files in
+        cachedDuplicateGroups = groups.compactMap { checksum, files in
             guard files.count > 1 else { return nil }
             // All files should have the same size since they're duplicates
             let size = files.first?.fileSize ?? 0
             return DuplicateGroup(checksum: checksum, files: files, size: size)
         }.sorted { $0.size > $1.size }  // Sort by size, largest first
+        
+        lastProcessedDate = mergedFileSetBySize.lastProcessed
     }
     
     // Computed property to check if all groups are selected
@@ -385,7 +402,7 @@ struct DuplicateGroupRowView: View {
         guard let firstFile = group.files.first else { return "doc" }
         switch firstFile.mediaType {
         case .photo: return "photo.stack"
-        case .video: return "video.stack"
+        case .video: return "play.rectangle.on.rectangle"
         case .audio: return "music.note.list"
         case .unsupported: return "doc.on.doc"
         }

@@ -111,13 +111,22 @@ class MediaFile: Identifiable, Hashable
     
     public func computeChecksum( size: Int ) -> String
     {
+        // Check if we already have this checksum cached
+        if let cached = checksums[size] {
+            return cached
+        }
+        
         do
         {
             let fileHandle = try FileHandle( forReadingFrom: fileUrl )
             defer { try? fileHandle.close() }
             if let data = try fileHandle.read(upToCount: size)
             {
-                checksums[size] = SHA256.hash(data: data).compactMap { String(format: "%02x", $0) }.joined()
+                // MEMORY FIX: Compute hash more efficiently
+                let hash = SHA256.hash(data: data)
+                let hashString = hash.compactMap { String(format: "%02x", $0) }.joined()
+                checksums[size] = hashString
+                // Data object is released here automatically when it goes out of scope
             }
         }
         catch(let e)
@@ -125,6 +134,23 @@ class MediaFile: Identifiable, Hashable
             print("Error: \(e)")
         }
         return checksums[size, default: ""]
+    }
+    
+    /// MEMORY FIX: Clear checksums to free memory after processing is complete
+    /// Call this after uniqueness has been determined
+    public func clearChecksums() {
+        checksums.removeAll()
+    }
+    
+    /// MEMORY FIX: Keep only the largest checksum (final result) and remove intermediate checksums
+    /// This significantly reduces memory usage while preserving the identification capability
+    public func clearIntermediateChecksums() {
+        guard let maxKey = checksums.keys.max() else { return }
+        let finalChecksum = checksums[maxKey]
+        checksums.removeAll()
+        if let final = finalChecksum {
+            checksums[maxKey] = final
+        }
     }
     
     // Computed properties

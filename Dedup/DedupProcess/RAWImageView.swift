@@ -147,6 +147,8 @@ struct RAWImageView: View {
         }
         .onDisappear {
             print("DEBUG: RAWImageView disappeared for file: \(file.displayName)")
+            // MEMORY FIX: Explicitly release image to free memory immediately
+            cleanupImage()
         }
     }
     
@@ -157,6 +159,12 @@ struct RAWImageView: View {
         image = nil
         rawMetadata = nil
         showExternalViewerOption = false
+    }
+    
+    private func cleanupImage() {
+        // MEMORY FIX: Explicitly nil out the image to release memory immediately
+        image = nil
+        print("DEBUG: RAWImageView - Image released for: \(file.displayName)")
     }
     
     private func setupRAWImage() {
@@ -205,9 +213,10 @@ struct RAWImageView: View {
         
         // Try multiple approaches for RAW image viewing
         
+        // MEMORY FIX: Load with size constraint to reduce memory usage
         // Approach 1: Try with NSImage (might work with some RAW files)
         DispatchQueue.main.async {
-            if let loadedImage = NSImage(contentsOf: file.fileUrl) {
+            if let loadedImage = self.loadImageWithSizeLimit(url: file.fileUrl, maxDimension: 2048) {
                 print("DEBUG: RAWImageView - NSImage loaded successfully: \(file.displayName)")
                 self.image = loadedImage
                 self.isLoading = false
@@ -261,6 +270,46 @@ struct RAWImageView: View {
     
     private func openWithExternalViewer() {
         RAWSupport.shared.openRAWFile(file.fileUrl)
+    }
+    
+    /// MEMORY FIX: Load image with size constraint to reduce memory usage
+    private func loadImageWithSizeLimit(url: URL, maxDimension: CGFloat) -> NSImage? {
+        // First try to get image metadata without loading full image
+        guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return nil
+        }
+        
+        // Get image properties without decoding
+        guard let imageProperties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any],
+              let pixelWidth = imageProperties[kCGImagePropertyPixelWidth] as? CGFloat,
+              let pixelHeight = imageProperties[kCGImagePropertyPixelHeight] as? CGFloat else {
+            // Fallback to regular loading if we can't get properties
+            return NSImage(contentsOf: url)
+        }
+        
+        // Calculate if we need to downsample
+        let maxOriginalDimension = max(pixelWidth, pixelHeight)
+        if maxOriginalDimension <= maxDimension {
+            // Image is small enough, load normally
+            return NSImage(contentsOf: url)
+        }
+        
+        // Downsample the image to reduce memory usage (critical for RAW files)
+        let options: [CFString: Any] = [
+            kCGImageSourceThumbnailMaxPixelSize: maxDimension,
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
+        
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, options as CFDictionary) else {
+            return NSImage(contentsOf: url)
+        }
+        
+        let size = NSSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
+        let image = NSImage(cgImage: cgImage, size: size)
+        
+        print("DEBUG: RAWImageView - Downsampled RAW image from \(Int(pixelWidth))x\(Int(pixelHeight)) to \(Int(size.width))x\(Int(size.height))")
+        return image
     }
 }
 

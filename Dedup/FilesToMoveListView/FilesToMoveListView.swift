@@ -127,6 +127,17 @@ struct FilesToMoveListView: View
                             duration: $duration,
                             timer: $timer
                         )
+                        .id(file.id)  // Force view refresh when file changes
+                        .onChange(of: file.id) { oldValue, newValue in
+                            // Reset player state when switching files
+                            player?.pause()
+                            player = nil
+                            isPlaying = false
+                            currentTime = 0
+                            duration = 0
+                            timer?.invalidate()
+                            timer = nil
+                        }
                     }
                     else
                     {

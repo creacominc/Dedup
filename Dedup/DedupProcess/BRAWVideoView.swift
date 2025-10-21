@@ -315,8 +315,14 @@ struct BRAWVideoView: View {
             NotificationCenter.default.removeObserver(self, name: .AVPlayerItemFailedToPlayToEndTime, object: playerItem)
         }
         
-        // Don't set player to nil - this causes the controls to disappear
-        // The player will be replaced in setupPlayer for the next file
+        // MEMORY FIX: Explicitly release player and its item to free memory immediately
+        // This is critical for freeing BRAW video buffer memory (which can be very large)
+        if let currentPlayer = player {
+            currentPlayer.replaceCurrentItem(with: nil)
+            player = nil
+        }
+        
+        print("DEBUG: BRAWVideoView - Player resources released")
     }
 }
 

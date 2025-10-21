@@ -2,7 +2,8 @@ import SwiftUI
 import AVKit
 import AppKit
 
-struct VideoView: View {
+struct VideoView: View
+{
     let file: MediaFile
     //    let file: FileInfo
     @Binding var player: AVPlayer?
@@ -13,11 +14,15 @@ struct VideoView: View {
     @State private var videoError: String?
     @State private var isLoading = true
     
-    var body: some View {
-        VStack(spacing: 0) {
+    var body: some View
+    {
+        VStack(spacing: 0)
+        {
             // Video player
-            if let player = player, player.currentItem != nil, player.currentItem?.status != .failed {
-                GeometryReader { geometry in
+            if let player = player, player.currentItem != nil, player.currentItem?.status != .failed
+            {
+                GeometryReader
+                { geometry in
                     VideoPlayer(player: player)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.red.opacity(0.3)) // Debug background restored
@@ -29,8 +34,11 @@ struct VideoView: View {
                             print("DEBUG: VideoPlayer disappeared for: \(file.displayName)")
                         }
                 }
-            } else if let videoError = videoError {
-                GeometryReader { geometry in
+            }
+            else if let videoError = videoError
+            {
+                GeometryReader
+                { geometry in
                     Rectangle()
                         .fill(Color(.controlBackgroundColor))
                         .aspectRatio(contentMode: .fit)
@@ -58,16 +66,23 @@ struct VideoView: View {
                 .onAppear {
                     print("DEBUG: VideoView showing error - \(file.displayName), error: \(videoError)")
                 }
-            } else if isLoading {
-                VStack(spacing: 12) {
+            }
+            else if isLoading
+            {
+                VStack(spacing: 12)
+                {
                     ProgressView("Loading video...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .onAppear {
+                .onAppear
+                {
                     print("DEBUG: VideoView showing loading - \(file.displayName)")
                 }
-            } else {
-                GeometryReader { geometry in
+            }
+            else
+            {
+                GeometryReader
+                { geometry in
                     Rectangle()
                         .fill(Color(.controlBackgroundColor))
                         .aspectRatio(contentMode: .fit)
@@ -89,7 +104,8 @@ struct VideoView: View {
                             }
                         )
                 }
-                .onAppear {
+                .onAppear
+                {
                     print("DEBUG: VideoView showing 'not available' - \(file.displayName)")
                     print("DEBUG: VideoView state - player: \(player != nil), isLoading: \(isLoading), videoError: \(videoError ?? "none")")
                 }
@@ -97,18 +113,21 @@ struct VideoView: View {
         }
         .padding(.all, 10) // Reduced padding for more video space
         .background(Color.blue.opacity(0.1)) // Debug container background restored
-        .onAppear {
+        .onAppear
+        {
             print("DEBUG: VideoView appeared for file: \(file.displayName)")
             resetState()
             setupPlayer()
         }
-        .onDisappear {
+        .onDisappear
+        {
             print("DEBUG: VideoView disappeared for file: \(file.displayName)")
             cleanupPlayer()
         }
     }
     
-    private func resetState() {
+    private func resetState()
+    {
         print("DEBUG: VideoView - Resetting state for: \(file.displayName)")
         isLoading = true
         videoError = nil
@@ -118,7 +137,8 @@ struct VideoView: View {
         // Don't reset the player here - let setupPlayer handle it
     }
     
-    private func setupPlayer() {
+    private func setupPlayer()
+    {
         print("DEBUG: VideoView - Setting up player for: \(file.displayName)")
         isLoading = true
         
@@ -196,7 +216,8 @@ struct VideoView: View {
         }
     }
     
-    private func cleanupPlayer() {
+    private func cleanupPlayer()
+    {
         timer?.invalidate()
         timer = nil
         player?.pause()
@@ -206,11 +227,18 @@ struct VideoView: View {
             NotificationCenter.default.removeObserver(self, name: .AVPlayerItemFailedToPlayToEndTime, object: playerItem)
         }
         
-        // Don't set player to nil - this causes the controls to disappear
-        // The player will be replaced in setupPlayer for the next file
+        // MEMORY FIX: Explicitly release player and its item to free memory immediately
+        // This is critical for freeing video buffer memory
+        if let currentPlayer = player {
+            currentPlayer.replaceCurrentItem(with: nil)
+            player = nil
+        }
+        
+        print("DEBUG: VideoView - Player resources released")
     }
     
-    private func formatTime(_ time: Double) -> String {
+    private func formatTime(_ time: Double) -> String
+    {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
         return String(format: "%d:%02d", minutes, seconds)
