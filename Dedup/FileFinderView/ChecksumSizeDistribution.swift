@@ -71,14 +71,15 @@ struct ChecksumSizeDistribution: View
                         // Clear previous results when starting new processing
                         bytesNeededBySize = [:]
                         
-                        // Capture the fileSetBySize to use in background thread
+                        // Capture the fileSetBySize to use in background task
                         let fileSetBySizeCapture: FileSetBySize = fileSetBySize
                         
-                        // Process on background thread to keep UI responsive
-                        DispatchQueue.global(qos: .userInitiated).async
+                        // Process using async/await with Task for concurrent execution
+                        Task.detached(priority: .userInitiated)
                         {
                             // bytes needed for uniqueness as a percent of size
-                            let results: [Int : Int] = fileSetBySizeCapture.getBytesNeededForUniqueness(
+                            // PARALLEL OPTIMIZATION: Uses concurrent task execution internally
+                            let results: [Int : Int] = await fileSetBySizeCapture.getBytesNeededForUniqueness(
                                     currentLevel: { level in
                                         DispatchQueue.main.async {
                                             self.currentLevel = level
@@ -104,11 +105,12 @@ struct ChecksumSizeDistribution: View
                                                 "Status Msg update: \(self.statusMsg)"
                                             )
                                         }
-                                    }
+                                    },
+                                    maxConcurrentTasks: 6  // Process 6 files concurrently for optimal CPU/I/O utilization
                                 )
                             
                             // Update results on main thread
-                            DispatchQueue.main.async
+                            await MainActor.run
                             {
                                 if !self.shouldCancel
                                 {

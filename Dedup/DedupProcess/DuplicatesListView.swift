@@ -60,9 +60,10 @@ struct DuplicatesListView: View
         mergedFileSetBySize.forEachFile { file in
             guard !file.isUnique else { return }
             
-            // Get the final checksum (largest checksum size)
-            if let maxChecksumKey = file.checksums.keys.max(),
-               let checksum = file.checksums[maxChecksumKey] {
+            // Get the cumulative checksum signature (all chunks combined)
+            // This uniquely identifies the file content
+            let checksum = file.checksums.joined(separator: "|")
+            if !checksum.isEmpty {
                 groups[checksum, default: []].append(file)
             }
         }

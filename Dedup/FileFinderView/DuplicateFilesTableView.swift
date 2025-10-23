@@ -37,15 +37,18 @@ struct DuplicateFilesTableView: View {
         fileSetBySize.forEachFile { file in
             // Only include files that are not marked as unique
             if !file.isUnique && file.checksums.count >= 1 {
-                // Find the maximum checksum size
-                let maxSize = file.checksums.keys.max() ?? 0
-                let checksumAtMax = file.checksums[maxSize] ?? ""
+                // Calculate bytes read based on number of chunks
+                let chunksRead = file.checksums.count
+                let bytesRead = min(chunksRead * MediaFile.chunkSize, file.fileSize)
+                
+                // Get cumulative checksum signature
+                let checksumSignature = file.checksums.joined(separator: "|")
                 
                 rows.append(DuplicateFileRow(
                     fileName: file.fileUrl.lastPathComponent,
                     filePath: file.fileUrl.path,
-                    maxChecksumSize: maxSize,
-                    checksumAtMaxSize: checksumAtMax,
+                    maxChecksumSize: bytesRead,
+                    checksumAtMaxSize: checksumSignature,
                     fileSize: file.fileSize
                 ))
             }

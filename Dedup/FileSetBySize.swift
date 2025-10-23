@@ -180,10 +180,10 @@ class FileSetBySize: @unchecked Sendable
     {
         // Create a list of Int sizes for checksums, logarithmically spaced
         var checksumSizes: [Int] = []
-        
+
         let minChunk = 128
         let maxSize = size + minChunk
-        
+
         // We want to start at 128 and go up to maxSize, using logarithmic spacing
         if maxSize <= minChunk * 2
         {
@@ -225,13 +225,17 @@ class FileSetBySize: @unchecked Sendable
         return formatter.string(fromByteCount: Int64(bytes))
     }
 
-    // get bytes needed to determine uniqueness of all files in all sets
-    // return a map of file sizes and the bytes needed to ensure uniqueness
+    // MEMORY OPTIMIZATION: Chunk-based deduplication with PARALLEL PROCESSING
+    // This method uses a fixed chunk size to read files incrementally,
+    // eliminating non-duplicates early without reading entire files.
+    // Files are processed in parallel (controlled concurrency) to maximize CPU and I/O utilization
+    // Returns a map of file sizes and the bytes needed to ensure uniqueness
     public func getBytesNeededForUniqueness( currentLevel: @escaping @Sendable (Int) -> Void = { _ in }
                                             , maxLevel: @escaping @Sendable (Int) -> Void = { _ in }
                                             , shouldCancel: @escaping @Sendable () -> Bool = { false }
                                             , updateStatus: @escaping @Sendable (String) -> Void = { _ in }
-                                            ) -> [Int:Int]
+                                            , maxConcurrentTasks: Int = 6  // Default: 6 concurrent file operations
+                                            ) async -> [Int:Int]
     {
         // map to be returned.
         var bytesNeeded: [Int:Int] = [:]
@@ -268,60 +272,144 @@ class FileSetBySize: @unchecked Sendable
             let fileCount: Int = filesAtSize.count
             let uniquePathCount: Int = Set(filesAtSize.map { $0.fileUrl.path() }).count
             updateStatus("Processing size \(formatBytes(fileSize)) with \(fileCount) files (\(uniquePathCount) unique paths)")
-            
+
             // Warn if there are duplicate file objects
             if fileCount != uniquePathCount {
                 updateStatus("  WARNING: \(fileCount - uniquePathCount) duplicate file objects detected!")
             }
+
+            // MEMORY OPTIMIZATION: Calculate maximum number of chunks needed for this file size
+            let maxChunks: Int = (fileSize + MediaFile.chunkSize - 1) / MediaFile.chunkSize
+            var bytesProcessed: Int = 0
+            var allFilesUnique: Bool = false
             
-            let checksumSizes: [Int] = getChecksumSizes(size: fileSize)
-            var checksumSizeHandled: Int = 0
-            // for every checksum size
-            for checksumSize in checksumSizes
+            // Process files chunk by chunk
+            // Group files by their checksum signature (concatenated checksums up to current chunk)
+            var fileGroups: [String: [MediaFile]] = [:]
+            
+            // Initialize: all files start in one group
+            for file: MediaFile in filesAtSize {
+                let key: String = file.fileUrl.path() // Use path as initial grouping key
+                fileGroups[key] = [file]
+            }
+            
+            // Process each chunk incrementally
+            for chunkIndex: Int in 0..<maxChunks
             {
                 // Check for cancellation
                 if shouldCancel() {
                     break
                 }
                 
-                // MEMORY FIX: Use String set instead of Data set to reduce memory overhead
-                var uniqueChecksums: Set<String> = []
-                uniqueChecksums.reserveCapacity(fileCount) // Pre-allocate to avoid resizing
+                // Create new groups based on checksums up to this chunk
+                var newGroups: [String: [MediaFile]] = [:]
                 
-                // print( "checksumSize == \(checksumSize)" )
-                // iterate using the local reference - no additional copy
-                for file: MediaFile in filesAtSize
-                {
-                    let checksumString = file.computeChecksum(size: checksumSize)
-                    uniqueChecksums.insert(checksumString)
+                // Process all files still in contention
+                var filesToProcess: [MediaFile] = []
+                for group: [MediaFile] in fileGroups.values {
+                    filesToProcess.append(contentsOf: group)
                 }
-                checksumSizeHandled = checksumSize
-                // stop if the number of uniqueChecksums == the number of files
-                if uniqueChecksums.count == fileCount
-                {
-                    updateStatus( "Size \(fileSize): Found uniqueness at \(checksumSize) bytes for \(fileCount) files" )
-                    bytesNeeded[fileSize] = checksumSize
-                    
-                    // MEMORY FIX: Clear intermediate checksums from files now that we've found uniqueness
-                    // Keep only the final checksum that distinguishes files
-                    for file in filesAtSize {
-                        file.clearIntermediateChecksums()
-                    }
-                    
-                    // break out of for loop
+                
+                // Early exit if all files are already unique
+                if filesToProcess.isEmpty {
+                    allFilesUnique = true
                     break
                 }
                 
-                // MEMORY FIX: Explicitly clear the set to release memory before next iteration
-                uniqueChecksums.removeAll()
-            } // for checksumSizes
+                updateStatus("  Chunk \(chunkIndex + 1)/\(maxChunks): Processing \(filesToProcess.count) files of size \(formatBytes(fileSize))")
+                
+                // PARALLEL OPTIMIZATION: Compute checksums concurrently with controlled parallelism
+                // Process files in parallel using TaskGroup, limited by maxConcurrentTasks
+                await withTaskGroup(of: (MediaFile, String).self) { group in
+                    var activeTasks = 0
+                    var fileIndex = 0
+                    
+                    // Start initial batch of tasks
+                    while fileIndex < filesToProcess.count && activeTasks < maxConcurrentTasks {
+                        let file = filesToProcess[fileIndex]
+                        group.addTask {
+                            // Each task runs in its own context with autoreleasepool
+                            let checksum = await file.computeChunkChecksumAsync(chunkIndex: chunkIndex)
+                            return (file, checksum)
+                        }
+                        activeTasks += 1
+                        fileIndex += 1
+                    }
+                    
+                    // Process results and spawn new tasks as old ones complete
+                    for await (file, _) in group {
+                        // Build cumulative checksum key (all chunks up to and including this one)
+                        let cumulativeKey = file.checksums.joined(separator: "|")
+                        
+                        // Group files by their cumulative checksum signature
+                        newGroups[cumulativeKey, default: []].append(file)
+                        
+                        // Spawn next task if there are more files to process
+                        if fileIndex < filesToProcess.count {
+                            let nextFile = filesToProcess[fileIndex]
+                            group.addTask {
+                                let checksum = await nextFile.computeChunkChecksumAsync(chunkIndex: chunkIndex)
+                                return (nextFile, checksum)
+                            }
+                            fileIndex += 1
+                        }
+                    }
+                }
+                
+                // Update bytes processed
+                bytesProcessed = min((chunkIndex + 1) * MediaFile.chunkSize, fileSize)
+                
+                // Check if all files are now unique (each group has only one file)
+                let uniqueGroups = newGroups.filter { $0.value.count == 1 }
+                if uniqueGroups.count == newGroups.count {
+                    // All files are now distinguishable
+                    allFilesUnique = true
+                    updateStatus("  Found uniqueness at chunk \(chunkIndex + 1) (\(formatBytes(bytesProcessed)))")
+                    break
+                }
+                
+                // Update fileGroups for next iteration (only keep groups with multiple files)
+                fileGroups = newGroups.filter { $0.value.count > 1 }
+                
+                // If no more groups with duplicates, we're done
+                if fileGroups.isEmpty {
+                    allFilesUnique = true
+                    break
+                }
+            } // for each chunk
             
-            // Check if we never found uniqueness
-            if bytesNeeded[fileSize] == nil
-            {
+            // Mark files as unique or duplicate based on final grouping
+            if allFilesUnique {
+                // Create final grouping
+                var finalGroups: [String: [MediaFile]] = [:]
+                for file in filesAtSize {
+                    let key = file.checksums.joined(separator: "|")
+                    finalGroups[key, default: []].append(file)
+                }
+                
+                // Mark files based on group size
+                for (_, group) in finalGroups {
+                    if group.count == 1 {
+                        group[0].isUnique = true
+                    } else {
+                        // True duplicates - same checksum signature
+                        for file in group {
+                            file.isUnique = false
+                        }
+                    }
+                }
+                
+                bytesNeeded[fileSize] = bytesProcessed
+                
+                // MEMORY OPTIMIZATION: Clear intermediate checksums from unique files
+                for file in filesAtSize where file.isUnique {
+                    file.clearIntermediateChecksums()
+                }
+            } else {
+                // Could not distinguish all files even after reading everything
                 let uniquePaths: Set<String> = Set(filesAtSize.map { $0.fileUrl.path() })
                 
-                print( "Size \(fileSize): WARNING - Could not distinguish all files even at maximum checksum size: \(checksumSizeHandled)" )
+                print( "Size \(fileSize): WARNING - Could not distinguish all files even after processing all chunks" )
                 updateStatus( "  Total file objects: \(fileCount), Unique paths: \(uniquePaths.count)" )
                 
                 // Check for duplicate file objects (same path appearing multiple times)
@@ -329,30 +417,27 @@ class FileSetBySize: @unchecked Sendable
                     updateStatus( "  ERROR: Found \(filesAtSize.count - uniquePaths.count) duplicate file objects in the array!" )
                 }
                 
-                 // print the checksums for and the paths to the duplicate files
-                 for file in filesAtSize
-                 {
-                     file.isUnique = false
-                     print(
-                        "\tSize: \(fileSize), \t\(file.checksums.max(by: <)!)  :  \(file.fileUrl.path())"
-                     )
-                 }
-                // set the size to the file size
+                // Print the checksums for the duplicate files
+                for file in filesAtSize {
+                    file.isUnique = false
+                    let checksumStr = file.checksums.joined(separator: "|")
+                    print("\tSize: \(fileSize), \t\(checksumStr) : \(file.fileUrl.path())")
+                }
+                
+                // Set bytes needed to file size
                 bytesNeeded[fileSize] = fileSize
             }
             
             // Update progress after processing each size
             processedCount += 1
+            let currentCount = processedCount
             DispatchQueue.main.async {
-                currentLevel(processedCount)
+                currentLevel(currentCount)
             }
             
-            // MEMORY FIX: Periodically suggest garbage collection every 100 sizes
-            if processedCount % 100 == 0 {
-                // Force autoreleasepool drain to release temporary objects
-                autoreleasepool {
-                    // This helps release any autoreleased objects accumulated during processing
-                }
+            // MEMORY OPTIMIZATION: Drain autoreleasepool more frequently (every 10 sizes)
+            if processedCount % 10 == 0 {
+                autoreleasepool { }
             }
             
             // Update processing timestamp to signal that isUnique properties have been modified
