@@ -23,10 +23,16 @@ class MediaFile: Identifiable, Hashable, @unchecked Sendable
     var checksums: [String] = []  // Array of chunk checksums, index = chunk number
     let fileExtension: String
     
-    // MEMORY OPTIMIZATION: Fixed chunk size for reading files (2 GB)
+    // MEMORY OPTIMIZATION: Dynamic chunk size for reading files
     // Larger chunks reduce I/O overhead, especially over network
-    // 2GB is a good balance between memory usage and I/O efficiency
-    static let chunkSize: Int = 4 * 1024 * 1024 * 1024  // 2 GB
+    // Chunk size is calculated based on available memory budget and number of concurrent tasks
+    // Formula: chunkSize = memoryBudget / numConcurrentTasks
+    // This ensures we use available memory efficiently while maintaining high parallelism
+    // SAFETY: nonisolated(unsafe) is safe here because:
+    // 1. Chunk size is set once per file size BEFORE parallel processing begins
+    // 2. All tasks processing the same file size read the same value
+    // 3. No concurrent writes occur during parallel processing
+    nonisolated(unsafe) static var chunkSize: Int = 4 * 1024 * 1024 * 1024  // Default 4 GB, adjusted dynamically
     let mediaType: MediaType
     let creationDate: Date
     let modificationDate: Date

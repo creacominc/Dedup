@@ -225,16 +225,19 @@ class FileSetBySize: @unchecked Sendable
         return formatter.string(fromByteCount: Int64(bytes))
     }
 
-    // MEMORY OPTIMIZATION: Chunk-based deduplication with PARALLEL PROCESSING
-    // This method uses a fixed chunk size to read files incrementally,
+    // MEMORY OPTIMIZATION: Chunk-based deduplication with ADAPTIVE PARALLEL PROCESSING
+    // This method uses a dynamic chunk size to read files incrementally,
     // eliminating non-duplicates early without reading entire files.
-    // Files are processed in parallel (controlled concurrency) to maximize CPU and I/O utilization
+    // Files are processed in parallel (adaptive concurrency) to maximize CPU and I/O utilization
+    // Parallelism adapts based on file count per size: min(fileCount, parallelismThreshold)
+    // Chunk size adapts based on memory budget: memoryBudgetGB / numThreads
     // Returns a map of file sizes and the bytes needed to ensure uniqueness
     public func getBytesNeededForUniqueness( currentLevel: @escaping @Sendable (Int) -> Void = { _ in }
                                             , maxLevel: @escaping @Sendable (Int) -> Void = { _ in }
                                             , shouldCancel: @escaping @Sendable () -> Bool = { false }
                                             , updateStatus: @escaping @Sendable (String) -> Void = { _ in }
-                                            , maxConcurrentTasks: Int = 6  // Default: 6 concurrent file operations
+                                            , memoryBudgetGB: Int = 32  // Memory budget in GB (default: 32GB)
+                                            , parallelismThreshold: Int = 16  // Max concurrent tasks (default: 16)
                                             ) async -> [Int:Int]
     {
         // map to be returned.
@@ -271,7 +274,22 @@ class FileSetBySize: @unchecked Sendable
             guard let filesAtSize: [MediaFile] = fileSetsBySize[fileSize] else { continue }
             let fileCount: Int = filesAtSize.count
             let uniquePathCount: Int = Set(filesAtSize.map { $0.fileUrl.path() }).count
+            
+            // ADAPTIVE PARALLELISM: Calculate optimal concurrency for this file size
+            // Use min(fileCount, threshold) to avoid creating more threads than files
+            let maxConcurrentTasks = min(fileCount, parallelismThreshold)
+            
+            // ADAPTIVE CHUNK SIZE: Calculate optimal chunk size based on memory budget
+            // Formula: chunkSize = memoryBudget / numThreads
+            // This ensures we use available memory efficiently while maintaining high parallelism
+            let memoryBudgetBytes = memoryBudgetGB * 1024 * 1024 * 1024
+            let optimalChunkSize = max(memoryBudgetBytes / maxConcurrentTasks, 128 * 1024 * 1024)  // Minimum 128MB
+            
+            // Set the chunk size for this file size processing
+            MediaFile.chunkSize = optimalChunkSize
+            
             updateStatus("Processing size \(formatBytes(fileSize)) with \(fileCount) files (\(uniquePathCount) unique paths)")
+            updateStatus("  Using \(maxConcurrentTasks) threads, chunk size: \(formatBytes(optimalChunkSize))")
 
             // Warn if there are duplicate file objects
             if fileCount != uniquePathCount {

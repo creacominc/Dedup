@@ -78,7 +78,9 @@ struct ChecksumSizeDistribution: View
                         Task.detached(priority: .userInitiated)
                         {
                             // bytes needed for uniqueness as a percent of size
-                            // PARALLEL OPTIMIZATION: Uses concurrent task execution internally
+                            // ADAPTIVE PARALLEL OPTIMIZATION: Uses adaptive concurrent task execution internally
+                            // - Parallelism adapts per file size: min(fileCount, 16)
+                            // - Chunk size adapts for memory efficiency: 32GB / numThreads
                             let results: [Int : Int] = await fileSetBySizeCapture.getBytesNeededForUniqueness(
                                     currentLevel: { level in
                                         DispatchQueue.main.async {
@@ -105,8 +107,10 @@ struct ChecksumSizeDistribution: View
                                                 "Status Msg update: \(self.statusMsg)"
                                             )
                                         }
-                                    },
-                                    maxConcurrentTasks: 6  // Process 6 files concurrently for optimal CPU/I/O utilization
+                                    }
+                                    // Using default parameters:
+                                    // - memoryBudgetGB: 32 (allows up to 32GB memory usage)
+                                    // - parallelismThreshold: 16 (up to 16 concurrent tasks per file size)
                                 )
                             
                             // Update results on main thread
