@@ -24,6 +24,7 @@ struct FileFinderView: View
     @State var processEnabled: Bool = false
     @State var currentLevel: Int = 0
     @State var maxLevel: Int = 0
+    @Binding var processed: Bool
 
     var body: some View
     {
@@ -41,6 +42,7 @@ struct FileFinderView: View
                 targetFileSetBySize: $targetFileSetBySize
                 , updateDistribution: $updateDistribution
             )
+
             FileSizeDistributionView( sourceFileSetBySize: $sourceFileSetBySize
                                       , targetFileSetBySize: $targetFileSetBySize
                                       , mergedFileSetBySize: $mergedFileSetBySize
@@ -55,6 +57,7 @@ struct FileFinderView: View
                                       , fileSetBySize: $mergedFileSetBySize
                                       , currentLevel: $currentLevel
                                       , maxLevel: $maxLevel
+                                      , processed: $processed
             )
 
             // progress bar
@@ -90,9 +93,11 @@ struct FileFinderView: View
     @Previewable @State var statusMsg: String = "testing  ..."
     @Previewable @State var mergedFileSetBySize = FileSetBySize()
     @Previewable @State var targetURL: URL?
+    @Previewable @State var processed: Bool = false
 
     FileFinderView( statusMsg: $statusMsg
                     , targetURL: $targetURL
                     , mergedFileSetBySize: $mergedFileSetBySize
+                    , processed: $processed
     )
 }

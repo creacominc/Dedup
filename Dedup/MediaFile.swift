@@ -20,7 +20,7 @@ class MediaFile: Identifiable, Hashable, @unchecked Sendable
     let fileSize: Int
     var isMediaFile: Bool
     var isUnique: Bool = false
-    var checksums: [String] = []  // Array of chunk checksums, index = chunk number
+    var checksums: [Int:String] = [:]  // map of chunk index and checksum
     let fileExtension: String
     
     // MEMORY OPTIMIZATION: Dynamic chunk size for reading files
@@ -123,71 +123,14 @@ class MediaFile: Identifiable, Hashable, @unchecked Sendable
         self.isRegularFile = isRegularFile
     }
 
-    /// MEMORY OPTIMIZATION: Compute checksum for a specific chunk of the file
-    /// This uses a fixed buffer size and only reads the requested chunk
-    /// Uses autoreleasepool to ensure immediate memory release
-    /// @param chunkIndex: The zero-based index of the chunk to read (0 = first chunk, 1 = second chunk, etc.)
-    /// @returns: The SHA256 checksum of that chunk as a hex string
-    public func computeChunkChecksum(chunkIndex: Int) -> String
+    private func checksumIsCached(chunkIndex: Int) -> Bool
     {
-        // Check if we already have this checksum cached
-        if chunkIndex < checksums.count && !checksums[chunkIndex].isEmpty
-        {
-            return checksums[chunkIndex]
-        }
-        
-        // Ensure the checksums array is large enough
-        while checksums.count <= chunkIndex
-        {
-            checksums.append("")
-        }
-        
-        // CRITICAL: Use autoreleasepool to ensure Data buffer is released immediately
-        let hashString: String = autoreleasepool {
-            do
-            {
-                // Calculate offset and size for this chunk
-                let offset = UInt64(chunkIndex) * UInt64(MediaFile.chunkSize)
-                let bytesToRead = min(MediaFile.chunkSize, fileSize - (chunkIndex * MediaFile.chunkSize))
-                
-                // Guard against reading past end of file
-                guard bytesToRead > 0 else {
-                    return ""
-                }
-                
-                // Open file, read, compute hash, close immediately
-                let fileHandle = try FileHandle(forReadingFrom: fileUrl)
-                
-                // Seek to the chunk position
-                try fileHandle.seek(toOffset: offset)
-                
-                // Read the chunk
-                guard let data = try fileHandle.read(upToCount: bytesToRead) else {
-                    try? fileHandle.close()
-                    return ""
-                }
-                
-                // Close file IMMEDIATELY after reading, before computing hash
-                try? fileHandle.close()
-                
-                // Compute hash for this chunk
-                let hash: SHA256.Digest = SHA256.hash(data: data)
-                let result: String = hash.compactMap { String(format: "%02x", $0) }.joined()
-                
-                // Data buffer will be released when autoreleasepool exits
-                return result
-            }
-            catch let error
-            {
-                print("Error computing chunk checksum for \(fileUrl.path): \(error)")
-                return ""
-            }
-        }
-        
-        checksums[chunkIndex] = hashString
-        return hashString
+        return ( (chunkIndex < checksums.count)       
+                 && ((checksums[chunkIndex]) != nil)  
+                 && (!checksums[chunkIndex]!.isEmpty) 
+        )
     }
-    
+
     /// PARALLEL OPTIMIZATION: Async version of computeChunkChecksum for concurrent execution
     /// This allows multiple files to have their chunks computed in parallel
     /// @param chunkIndex: The zero-based index of the chunk to read
@@ -195,21 +138,20 @@ class MediaFile: Identifiable, Hashable, @unchecked Sendable
     public func computeChunkChecksumAsync(chunkIndex: Int) async -> String
     {
         // Check if we already have this checksum cached (thread-safe read)
-        if chunkIndex < checksums.count && !checksums[chunkIndex].isEmpty
+        if checksumIsCached(chunkIndex: chunkIndex)
         {
-            return checksums[chunkIndex]
+            print(
+                "Returning cached checksum (async) for chunk \(chunkIndex), value: \(checksums[chunkIndex] ?? "N/A"), file: \(displayName)"
+            )
+            return checksums[chunkIndex] ?? "N/A"
         }
-        
+
         // Compute checksum on a background thread to avoid blocking
-        return await Task.detached(priority: .userInitiated) {
-            // Ensure the checksums array is large enough
-            while self.checksums.count <= chunkIndex
-            {
-                self.checksums.append("")
-            }
-            
+        let hashString: String = await Task.detached(priority: .userInitiated)
+        {
             // CRITICAL: Use autoreleasepool to ensure Data buffer is released immediately
-            let hashString: String = autoreleasepool {
+            return autoreleasepool
+            {
                 do
                 {
                     // Calculate offset and size for this chunk
@@ -249,36 +191,30 @@ class MediaFile: Identifiable, Hashable, @unchecked Sendable
                     return ""
                 }
             }
-            
-            self.checksums[chunkIndex] = hashString
-            return hashString
         }.value
+        
+        // DEBUG: Log when storing checksum
+        if chunkIndex == 0 && hashString.isEmpty {
+            print("MediaFile ERROR: computeChunkChecksumAsync computed empty checksum for chunk \(chunkIndex) in file '\(self.fileUrl.lastPathComponent)'")
+        }
+        
+        // DEBUG: Log successful checksum storage
+        if !hashString.isEmpty {
+            print("MediaFile: Successfully stored checksum for chunk \(chunkIndex) in file '\(self.fileUrl.lastPathComponent)': \(String(hashString.prefix(16)))...")
+            print("  Checksums array now has \(self.checksums.count) elements")
+        } else {
+            print("MediaFile WARNING: Attempting to store empty checksum for chunk \(chunkIndex) in file '\(self.fileUrl.lastPathComponent)'")
+        }
+        
+        // Store the checksum on the main thread to avoid race conditions
+        self.checksums[chunkIndex] = hashString
+        
+        return hashString
     }
     
     /// Returns the number of chunks this file would be divided into
     public var chunkCount: Int {
         return (fileSize + MediaFile.chunkSize - 1) / MediaFile.chunkSize
-    }
-
-    /// MEMORY FIX: Clear checksums to free memory after processing is complete
-    /// Call this after uniqueness has been determined
-    public func clearChecksums()
-    {
-        checksums.removeAll()
-    }
-
-    /// MEMORY OPTIMIZATION: Keep only checksums that are actually needed to identify this file
-    /// For the chunk-based approach, we can optionally keep only the first N chunks
-    /// or clear all chunks after uniqueness has been determined
-    public func clearIntermediateChecksums()
-    {
-        // For now, we'll keep only the first chunk if any checksums exist
-        // This provides a basic "fingerprint" while freeing most memory
-        if checksums.count > 1
-        {
-            let firstChecksum = checksums[0]
-            checksums = [firstChecksum]
-        }
     }
 
     // Computed properties

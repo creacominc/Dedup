@@ -9,11 +9,11 @@ struct DuplicateGroup: Identifiable, Hashable {
     let size: Int
     
     static func == (lhs: DuplicateGroup, rhs: DuplicateGroup) -> Bool {
-        lhs.checksum == rhs.checksum
+        lhs.id == rhs.id
     }
     
     func hash(into hasher: inout Hasher) {
-        hasher.combine(checksum)
+        hasher.combine(id)
     }
 }
 
@@ -23,13 +23,17 @@ struct DuplicatesListView: View
     @Binding var statusMsg: String
     @Binding var mergedFileSetBySize : FileSetBySize
     @Binding var targetURL: URL?
-    
+    @Binding var processed: Bool
+
     @State private var selectedGroup: DuplicateGroup?
     @State private var selectedGroups: Set<DuplicateGroup> = []
     
     // MEMORY FIX: Cache computed duplicate groups to avoid recreating on every render
     @State private var cachedDuplicateGroups: [DuplicateGroup] = []
     @State private var lastProcessedDate: Date = .distantPast
+    @State private var needsRecomputation: Bool = true
+    @State private var isProcessing: Bool = false
+    @State private var hasProcessed: Bool = false
     
     // State for media player
     @State private var player: AVPlayer?
@@ -43,40 +47,96 @@ struct DuplicatesListView: View
     
     // MEMORY FIX: Computed property to group duplicates by their final (largest) checksum
     // Now uses cached result to avoid recreating arrays on every render
-    private var duplicateGroups: [DuplicateGroup] {
-        // Check if we need to recompute (data has changed)
-        if lastProcessedDate < mergedFileSetBySize.lastProcessed {
-            recomputeDuplicateGroups()
-        }
+    private var duplicateGroups: [DuplicateGroup]
+    {
+        // Simply return cached result - recomputation is triggered by onChange handlers
         return cachedDuplicateGroups
     }
     
     // MEMORY FIX: Separate function to recompute duplicate groups only when needed
-    private func recomputeDuplicateGroups() {
-        // Use direct iteration to avoid creating intermediate arrays
+    private func recomputeDuplicateGroups()
+    {
+        print("DuplicatesListView: Recomputing duplicate groups...")
+        print("DuplicatesListView: mergedFileSetBySize.totalFileCount = \(mergedFileSetBySize.totalFileCount)")
+        print("DuplicatesListView: mergedFileSetBySize.lastProcessed = \(mergedFileSetBySize.lastProcessed)")
+
+        // Group files by their checksum signature
         var groups: [String: [MediaFile]] = [:]
-        
+        var totalFiles = 0
+        var uniqueFiles = 0
+        var duplicateFiles = 0
+
         // Iterate directly over fileSetsBySize to avoid creating duplicateFiles array
         mergedFileSetBySize.forEachFile { file in
-            guard !file.isUnique else { return }
+            totalFiles += 1
             
+            // Skip if the file is marked unique
+            if file.isUnique {
+                uniqueFiles += 1
+                print("Duplicate skipped: file isUnique: \(file.displayName)")
+                return
+            }
+
+            // Skip if the file has no checksums yet
+            if file.checksums.isEmpty {
+                print("Duplicate skipped: no checksums: \(file.displayName)")
+                return
+            }
+
+            duplicateFiles += 1
+
             // Get the cumulative checksum signature (all chunks combined)
-            // This uniquely identifies the file content
-            let checksum = file.checksums.joined(separator: "|")
-            if !checksum.isEmpty {
-                groups[checksum, default: []].append(file)
+            let validChecksums = file.checksums.values.filter { !$0.isEmpty }
+            guard !validChecksums.isEmpty else {
+                print("Duplicate skipped: no valid checksums: \(file.displayName)")
+                return
+            }
+
+            let checksumSignature = validChecksums.joined(separator: "|")
+            print("DuplicatesListView: Processing file '\(file.fileUrl.lastPathComponent)' with checksum signature (first 64 chars): \(String(checksumSignature.prefix(64)))")
+            
+            groups[checksumSignature, default: []].append(file)
+        }
+        
+        print("DuplicatesListView: Total files: \(totalFiles), Unique: \(uniqueFiles), Duplicates: \(duplicateFiles)")
+        print("DuplicatesListView: Found \(groups.count) unique checksum groups")
+        
+        // Convert to DuplicateGroup array and filter groups with more than 1 file
+        let duplicateGroups: [DuplicateGroup] = groups.compactMap { checksum, files in
+            guard files.count > 1 else { 
+                print("DuplicatesListView: Skipping group with only 1 file")
+                return nil 
+            }
+            
+            // All files should have the same size since they're duplicates
+            let size = files.first?.fileSize ?? 0
+            let group = DuplicateGroup(checksum: checksum, files: files, size: size)
+            print("DuplicatesListView: Created group with \(group.files.count) files, size: \(size)")
+            return group
+        }
+        
+        print("DuplicatesListView: Created \(duplicateGroups.count) duplicate groups")
+        
+        // Sort by size, largest first
+        cachedDuplicateGroups = duplicateGroups.sorted { $0.size > $1.size }
+        print("DuplicatesListView: After sorting, cachedDuplicateGroups.count = \(cachedDuplicateGroups.count)")
+        
+        // Log details about the groups
+        for (index, group) in cachedDuplicateGroups.prefix(3).enumerated() {
+            print("DuplicatesListView: Group \(index + 1): \(group.files.count) files, size: \(group.size) bytes")
+            for file in group.files {
+                print("  - \(file.fileUrl.lastPathComponent) (isUnique: \(file.isUnique))")
             }
         }
         
-        // Convert to DuplicateGroup array and filter groups with more than 1 file
-        cachedDuplicateGroups = groups.compactMap { checksum, files in
-            guard files.count > 1 else { return nil }
-            // All files should have the same size since they're duplicates
-            let size = files.first?.fileSize ?? 0
-            return DuplicateGroup(checksum: checksum, files: files, size: size)
-        }.sorted { $0.size > $1.size }  // Sort by size, largest first
-        
         lastProcessedDate = mergedFileSetBySize.lastProcessed
+        needsRecomputation = false
+        
+        // Schedule status update to run on main thread to avoid state updates during view update
+        let finalMessage = "Found \(cachedDuplicateGroups.count) duplicate groups (\(duplicateFiles) files)"
+        DispatchQueue.main.async {
+            self.statusMsg = finalMessage
+        }
     }
     
     // Computed property to check if all groups are selected
@@ -103,27 +163,50 @@ struct DuplicatesListView: View
                     if allGroupsSelected
                     {
                         selectedGroups.removeAll()
-                        statusMsg = "Deselected all groups."
+                        DispatchQueue.main.async {
+                            statusMsg = "Deselected all groups."
+                        }
                     }
                     else
                     {
                         selectedGroups = Set(duplicateGroups)
-                        statusMsg = "Selected \(selectedGroups.count) groups."
+                        let count = selectedGroups.count
+                        DispatchQueue.main.async {
+                            statusMsg = "Selected \(count) groups."
+                        }
                     }
                 }
                 .disabled(duplicateGroups.isEmpty)
                 .accessibilityIdentifier("button-selectAllGroups")
                 
-                Button("Process \(selectedGroups.count) Groups")
+                Button(isProcessing ? "Processing..." : "Process \(selectedGroups.count) Groups")
                 {
                     Task {
                         await processSelectedGroups()
                     }
                 }
-                .disabled(selectedGroups.isEmpty)
+                .disabled(selectedGroups.isEmpty || isProcessing)
                 .accessibilityIdentifier("button-processSelectedGroups")
             }
             .padding(.horizontal)
+            .onAppear {
+                // Only recompute if we have actually processed files and need recomputation
+                print("DuplicatesListView: onAppear called")
+                print("DuplicatesListView: mergedFileSetBySize.lastProcessed = \(mergedFileSetBySize.lastProcessed)")
+                print("DuplicatesListView: lastProcessedDate = \(lastProcessedDate)")
+                print("DuplicatesListView: mergedFileSetBySize.totalFileCount = \(mergedFileSetBySize.totalFileCount)")
+                print("DuplicatesListView: hasProcessed = \(hasProcessed)")
+                print("DuplicatesListView: needsRecomputation = \(needsRecomputation)")
+                
+                // Only recompute if we have actually processed files and need recomputation
+                //if hasProcessed && mergedFileSetBySize.totalFileCount > 0 && needsRecomputation
+                if processed
+                {
+                    print("DuplicatesListView: Triggering recomputation on appear")
+                    recomputeDuplicateGroups()
+                }
+                print("DuplicatesListView: After onAppear, cachedDuplicateGroups.count = \(cachedDuplicateGroups.count)")
+            }
             
             // Target URL display
             if let targetURL = targetURL {
@@ -235,6 +318,33 @@ struct DuplicatesListView: View
                 }
             }
         }
+        .onChange( of: processed )
+        { oldValue, newValue in
+            print( "DuplicatesListView: onChange detected - processed changed from \(oldValue) to \(newValue)" )
+            if newValue
+            {
+                recomputeDuplicateGroups()
+            }
+        }
+//        .onChange(of: mergedFileSetBySize.lastProcessed) { oldValue, newValue in
+//            print("DuplicatesListView: onChange detected - lastProcessed changed from \(oldValue) to \(newValue)")
+//            // Only trigger recomputation if processing actually completed (not just started)
+//            if newValue > oldValue && mergedFileSetBySize.totalFileCount > 0 {
+//                print("DuplicatesListView: Processing completed, triggering recomputation")
+//                hasProcessed = true
+//                needsRecomputation = true
+//                recomputeDuplicateGroups()
+//            }
+//        }
+//        .onChange(of: mergedFileSetBySize.lastModified) { oldValue, newValue in
+//            print("DuplicatesListView: onChange detected - lastModified changed from \(oldValue) to \(newValue)")
+//            // Clear cached groups when file collection changes (folder selection)
+//            print("DuplicatesListView: File collection changed, clearing cached groups")
+//            cachedDuplicateGroups = []
+//            hasProcessed = false
+//            needsRecomputation = false
+//            statusMsg = "Select folders and press Process to find duplicates"
+//        }
     }
     
     private func getDestinationURL(for file: MediaFile) throws -> URL {
@@ -268,138 +378,180 @@ struct DuplicatesListView: View
         return destinationFolder.appendingPathComponent(file.displayName)
     }
     
-    private func processSelectedGroups() async {
+    private func processSelectedGroups() async
+    {
         guard !selectedGroups.isEmpty, let targetURL = targetURL else { return }
-        
-        statusMsg = "Processing \(selectedGroups.count) duplicate groups..."
-        
+
+        DispatchQueue.main.async
+        {
+            self.isProcessing = true
+            statusMsg = "Processing \(selectedGroups.count) duplicate groups..."
+        }
+
         var processedCount = 0
         var totalFilesDeleted = 0
         var totalFilesMoved = 0
-        
+
         // Convert to array for stable iteration
         let groupsToProcess = Array(selectedGroups)
-        
-        for group in groupsToProcess {
-            do {
+
+        for group in groupsToProcess
+        {
+            do
+            {
                 // Check if any file in the group is already in the target folder
-                let filesInTarget = group.files.filter { file in
+                let filesInTarget = group.files.filter
+                { file in
                     file.fileUrl.path().hasPrefix(targetURL.path())
                 }
-                
+
                 var fileToKeep: MediaFile?
                 var filesToDelete: [MediaFile] = []
-                
-                if filesInTarget.isEmpty {
+
+                if filesInTarget.isEmpty
+                {
                     // No files in target, move the first one
                     fileToKeep = group.files.first
                     filesToDelete = Array(group.files.dropFirst())
-                    
-                    if let fileToMove = fileToKeep {
+
+                    if let fileToMove = fileToKeep
+                    {
                         // Get the proper destination URL with date-based directory structure
                         let destinationURL = try getDestinationURL(for: fileToMove)
-                        
+
                         // Handle file name collision
                         var finalDestinationURL = destinationURL
-                        if fileManager.fileExists(atPath: destinationURL.path()) {
+                        if fileManager.fileExists(atPath: destinationURL.path())
+                        {
                             let filename = destinationURL.deletingPathExtension().lastPathComponent
                             let fileExtension = destinationURL.pathExtension
                             let destinationFolder = destinationURL.deletingLastPathComponent()
                             var counter = 1
-                            
-                            while fileManager.fileExists(atPath: finalDestinationURL.path()) {
+
+                            while fileManager.fileExists(atPath: finalDestinationURL.path())
+                            {
                                 let newFilename = "\(filename)_\(counter).\(fileExtension)"
                                 finalDestinationURL = destinationFolder.appendingPathComponent(newFilename)
                                 counter += 1
                             }
                         }
-                        
+
                         try fileManager.moveItem(at: fileToMove.fileUrl, to: finalDestinationURL)
                         totalFilesMoved += 1
                     }
-                } else {
+                } // filesInTarget.isEmpty
+                else
+                {
                     // At least one file already in target, keep it and delete all others
                     fileToKeep = filesInTarget.first
                     filesToDelete = group.files.filter { $0.id != fileToKeep?.id }
                 }
-                
+
                 // Delete all other files
-                for file in filesToDelete {
+                for file in filesToDelete
+                {
                     try fileManager.removeItem(at: file.fileUrl)
                     totalFilesDeleted += 1
                     // Remove from mergedFileSetBySize
                     mergedFileSetBySize.remove(mediaFile: file)
                 }
-                
+
                 // Remove the kept file from mergedFileSetBySize if it was moved
-                if let kept = fileToKeep, filesInTarget.isEmpty {
+                if let kept = fileToKeep, filesInTarget.isEmpty
+                {
                     mergedFileSetBySize.remove(mediaFile: kept)
                 }
-                
+
                 processedCount += 1
-                
+
                 // Update status periodically
-                if processedCount % 5 == 0 {
-                    statusMsg = "Processed \(processedCount) of \(groupsToProcess.count) groups..."
+                if processedCount % 5 == 0
+                {
+                    let message = "Processed \(processedCount) of \(groupsToProcess.count) groups..."
+                    DispatchQueue.main.async
+                    {
+                        statusMsg = message
+                    }
                 }
-                
-            } catch {
-                statusMsg = "Error processing group: \(error.localizedDescription)"
+
+            }
+            catch
+            {
+                let errorMessage = "Error processing group: \(error.localizedDescription)"
+                DispatchQueue.main.async
+                {
+                    statusMsg = errorMessage
+                }
                 return
             }
         }
-        
+
         // Clear selections
         selectedGroups.removeAll()
         selectedGroup = nil
-        
-        statusMsg = "Processed \(processedCount) groups: moved \(totalFilesMoved) files, deleted \(totalFilesDeleted) files."
+
+        let finalMessage = "Processed \(processedCount) groups: moved \(totalFilesMoved) files, deleted \(totalFilesDeleted) files."
+        DispatchQueue.main.async
+        {
+            self.isProcessing = false
+            self.statusMsg = finalMessage
+            // Trigger recomputation after processing is complete
+            self.needsRecomputation = true
+            self.recomputeDuplicateGroups()
+        }
     }
 }
 
 // MARK: - Duplicate Group Row View
-struct DuplicateGroupRowView: View {
+struct DuplicateGroupRowView: View
+{
     let group: DuplicateGroup
-    
-    var body: some View {
-        HStack(spacing: 12) {
+
+    var body: some View
+    {
+        HStack(spacing: 12)
+        {
             // Icon based on media type
             Image(systemName: iconName)
                 .font(.title2)
                 .foregroundColor(iconColor)
                 .frame(width: 24)
-            
-            VStack(alignment: .leading, spacing: 4) {
+
+            VStack(alignment: .leading, spacing: 4)
+            {
                 Text("\(group.files.count) duplicate files")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                
+
                 Text("Size: \(formatFileSize(group.size))")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                
-                if let firstFile = group.files.first {
-                    HStack(spacing: 8) {
+
+                if let firstFile = group.files.first
+                {
+                    HStack(spacing: 8)
+                    {
                         Text(firstFile.mediaType.displayName)
                             .font(.caption)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(iconColor.opacity(0.2))
                             .cornerRadius(4)
-                        
+
                         Text(firstFile.fileExtension.uppercased())
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
             }
-            
+
             Spacer()
         }
         .padding(.vertical, 4)
     }
-    
-    private var iconName: String {
+
+    private var iconName: String
+    {
         guard let firstFile = group.files.first else { return "doc" }
         switch firstFile.mediaType {
         case .photo: return "photo.stack"
@@ -409,7 +561,8 @@ struct DuplicateGroupRowView: View {
         }
     }
     
-    private var iconColor: Color {
+    private var iconColor: Color
+    {
         guard let firstFile = group.files.first else { return .gray }
         switch firstFile.mediaType {
         case .photo: return .blue
@@ -419,7 +572,8 @@ struct DuplicateGroupRowView: View {
         }
     }
     
-    private func formatFileSize(_ size: Int) -> String {
+    private func formatFileSize(_ size: Int) -> String
+    {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         return formatter.string(fromByteCount: Int64(size))
@@ -695,11 +849,13 @@ private struct VideoTypeView: View {
     @Previewable @State var statusMsg: String = "Ready"
     @Previewable @State var mergedFileSetBySize: FileSetBySize = createPreviewFileSetWithDuplicates()
     @Previewable @State var targetURL: URL? = URL(fileURLWithPath: "/Users/test/Target")
-    
+    @Previewable @State var processed: Bool = false
+
     DuplicatesListView(
         statusMsg: $statusMsg,
         mergedFileSetBySize: $mergedFileSetBySize,
-        targetURL: $targetURL
+        targetURL: $targetURL,
+        processed: $processed
     )
 }
 
@@ -707,11 +863,13 @@ private struct VideoTypeView: View {
     @Previewable @State var statusMsg: String = "Ready"
     @Previewable @State var mergedFileSetBySize = FileSetBySize()
     @Previewable @State var targetURL: URL? = URL(fileURLWithPath: "/Users/test/Target")
-    
+    @Previewable @State var processed: Bool = false
+
     DuplicatesListView(
         statusMsg: $statusMsg,
         mergedFileSetBySize: $mergedFileSetBySize,
-        targetURL: $targetURL
+        targetURL: $targetURL,
+        processed: $processed
     )
 }
 

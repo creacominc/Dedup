@@ -42,7 +42,7 @@ struct DuplicateFilesTableView: View {
                 let bytesRead = min(chunksRead * MediaFile.chunkSize, file.fileSize)
                 
                 // Get cumulative checksum signature
-                let checksumSignature = file.checksums.joined(separator: "|")
+                let checksumSignature = file.checksums.values.joined(separator: "|")
                 
                 rows.append(DuplicateFileRow(
                     fileName: file.fileUrl.lastPathComponent,

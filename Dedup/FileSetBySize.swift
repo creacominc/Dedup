@@ -247,6 +247,7 @@ class FileSetBySize: @unchecked Sendable
         // Direct iteration avoids copying arrays
         for files: [MediaFile] in fileSetsBySize.values where files.count == 1 {
             files.first!.isUnique = true
+            updateStatus( "Size: \(files.first!.fileSize) - Files: \(files.count) -  Marked file as unique: \(files.first!.displayName)" )
         }
 
         // Get all sizes that need processing (sizes with multiple files)
@@ -355,9 +356,38 @@ class FileSetBySize: @unchecked Sendable
                     }
                     
                     // Process results and spawn new tasks as old ones complete
-                    for await (file, _) in group {
-                        // Build cumulative checksum key (all chunks up to and including this one)
-                        let cumulativeKey = file.checksums.joined(separator: "|")
+                    for await (file, checksum) in group {
+                        // NOTE: computeChunkChecksumAsync already stored the checksum in file.checksums[chunkIndex]
+                        // We just use the returned value to verify and build the cumulative key
+                        
+                        // DEBUG: Verify checksum was stored
+                        print("FileSetBySize: Received checksum='\(String(checksum.prefix(16)))...' for chunk \(chunkIndex), file='\(file.fileUrl.lastPathComponent)'")
+                        print("  File's checksums array now has \(file.checksums.count) elements")
+                        if !file.checksums.isEmpty {
+                            print(
+                                "  First element: '\(String(file.checksums[0]?.prefix(16) ?? "N/A"))...'"
+                            )
+                        }
+                        
+                        // Build cumulative checksum key (all chunks up to and including this one) by joining the values (strings)
+                        let cumulativeKey = file.checksums.values.joined(separator: "|")
+                        // DEBUG: Log the first file of first chunk to verify
+                        if chunkIndex == 0 && newGroups.isEmpty {
+                            print("FileSetBySize: First file '\(file.fileUrl.lastPathComponent)' checksum value='\(checksum)', array has \(file.checksums.count) elements")
+                            if !file.checksums.isEmpty {
+                                print(
+                                        "  First element: '\(file.checksums[0]?.prefix(32), default: "N/A")...'"
+                                )
+                            }
+                        }
+                        
+                        // DEBUG: Verify checksums are present
+                        if cumulativeKey.isEmpty {
+                            print("FileSetBySize ERROR: Got empty cumulative checksum for file '\(file.fileUrl.lastPathComponent)' at chunk \(chunkIndex)")
+                            print("  Checksums array: \(file.checksums)")
+                            print("  Computed checksum value: '\(checksum)'")
+                            print("  Checksums count: \(file.checksums.count)")
+                        }
                         
                         // Group files by their cumulative checksum signature
                         newGroups[cumulativeKey, default: []].append(file)
@@ -401,27 +431,35 @@ class FileSetBySize: @unchecked Sendable
                 // Create final grouping
                 var finalGroups: [String: [MediaFile]] = [:]
                 for file in filesAtSize {
-                    let key = file.checksums.joined(separator: "|")
+                    let key = file.checksums.values.joined(separator: "|")
                     finalGroups[key, default: []].append(file)
                 }
                 
                 // Mark files based on group size
-                for (_, group) in finalGroups {
+                for (key, group) in finalGroups {
                     if group.count == 1 {
                         group[0].isUnique = true
                     } else {
                         // True duplicates - same checksum signature
+                        let previewKey = String(key.prefix(min(64, key.count)))
+                        print("FileSetBySize: Found \(group.count) duplicate files with checksum signature '\(previewKey)...'")
                         for file in group {
                             file.isUnique = false
+                            print("  - \(file.fileUrl.lastPathComponent) has \(file.checksums.count) chunks")
+                            // DEBUG: Verify that duplicates have checksums
+                            if file.checksums.isEmpty {
+                                print("  WARNING: Duplicate file has no checksums! \(file.fileUrl.path())")
+                            }
                         }
                     }
                 }
                 
                 bytesNeeded[fileSize] = bytesProcessed
-                
-                // MEMORY OPTIMIZATION: Clear intermediate checksums from unique files
-                for file in filesAtSize where file.isUnique {
-                    file.clearIntermediateChecksums()
+
+                // DEBUG: Print summary of duplicates found
+                let duplicateCount = filesAtSize.filter { !$0.isUnique }.count
+                if duplicateCount > 0 {
+                    print("Size \(fileSize): Found \(duplicateCount) duplicate files")
                 }
             } else {
                 // Could not distinguish all files even after reading everything
@@ -438,8 +476,18 @@ class FileSetBySize: @unchecked Sendable
                 // Print the checksums for the duplicate files
                 for file in filesAtSize {
                     file.isUnique = false
-                    let checksumStr = file.checksums.joined(separator: "|")
+                    let checksumStr = file.checksums.values.joined(separator: "|")
                     print("\tSize: \(fileSize), \t\(checksumStr) : \(file.fileUrl.path())")
+                    // DEBUG: Log detailed checksum info
+                    print("  DEBUG: File '\(file.fileUrl.lastPathComponent)' has \(file.checksums.count) checksums")
+                    if !file.checksums.isEmpty {
+                        print("    First checksum: \(file.checksums[0]?.prefix(32), default: "N/A")...")
+                    } else {
+                        print("    WARNING: File has NO checksums!")
+                    }
+                    // CRITICAL DEBUG: Verify checksums persist by checking object identity
+                    print("    File object ID: \(ObjectIdentifier(file))")
+                    print("    Checksums array address: \(file.checksums)")
                 }
                 
                 // Set bytes needed to file size

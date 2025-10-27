@@ -20,6 +20,7 @@ struct ChecksumSizeDistribution: View
     // [in/out] progress tracking
     @Binding var currentLevel: Int
     @Binding var maxLevel: Int
+    @Binding var processed: Bool
     
     // State to hold the results
     @State private var bytesNeededBySize: [Int:Int] = [:]
@@ -27,6 +28,8 @@ struct ChecksumSizeDistribution: View
     @State private var isProcessing: Bool = false
     // Cancellation flag
     @State private var shouldCancel: Bool = false
+    // indicates when processing is complete
+    @State private var isComplete: Bool = false
     // Sorting state
     @State private var sortColumn: SortColumn = .fileSize
     @State private var sortAscending: Bool = true
@@ -74,6 +77,7 @@ struct ChecksumSizeDistribution: View
                         // Capture the fileSetBySize to use in background task
                         let fileSetBySizeCapture: FileSetBySize = fileSetBySize
                         
+                        self.processed = false
                         // Process using async/await with Task for concurrent execution
                         Task.detached(priority: .userInitiated)
                         {
@@ -116,6 +120,8 @@ struct ChecksumSizeDistribution: View
                             // Update results on main thread
                             await MainActor.run
                             {
+                                self.isComplete = false
+
                                 if !self.shouldCancel
                                 {
                                     // Only update results if not cancelled
@@ -127,6 +133,8 @@ struct ChecksumSizeDistribution: View
                                     else
                                     {
                                         self.statusMsg = "Processing completed. Results count: \(results.count)"
+                                        self.isComplete = true;
+                                        self.processed = true
                                     }
                                 }
                                 else
@@ -262,11 +270,14 @@ struct ChecksumSizeDistribution: View
     @Previewable @State var fileSetBySize: FileSetBySize = FileSetBySize()
     @Previewable @State var currentLevel: Int = 0
     @Previewable @State var maxLevel: Int = 100
+    @Previewable @State var processed: Bool = false
 
     ChecksumSizeDistribution( statusMsg: $statusMsg
                               , sourceURL: sourceURL
                               , processEnabled: $processEnabled
                               , fileSetBySize: $fileSetBySize
                               , currentLevel: $currentLevel
-                              , maxLevel: $maxLevel )
+                              , maxLevel: $maxLevel
+                              , processed: $processed
+    )
 }

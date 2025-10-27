@@ -7,6 +7,7 @@ struct ContentView: View {
     @State var statusMsg: String = "testing  ..."
     @State var mergedFileSetBySize = FileSetBySize()
     @State var targetURL: URL?
+    @State var processed: Bool = false
 
     var body: some View
     {
@@ -18,6 +19,7 @@ struct ContentView: View {
                 FileFinderView( statusMsg: $statusMsg
                                 , targetURL: $targetURL
                                 , mergedFileSetBySize: $mergedFileSetBySize
+                                , processed: $processed
                 )
                     .tabItem
                     {
@@ -39,7 +41,9 @@ struct ContentView: View {
                 // duplicate files
                 DuplicatesListView( statusMsg: $statusMsg,
                                     mergedFileSetBySize: $mergedFileSetBySize,
-                                    targetURL: $targetURL )
+                                    targetURL: $targetURL,
+                                    processed: $processed
+                )
                     .tabItem
                     {
                         Label( "Duplicates", systemImage: "doc.on.doc.fill" )
