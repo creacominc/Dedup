@@ -6,7 +6,7 @@
     "configurations": [
         {
             "name": "Debug Dedup",
-            "type": "lldb",
+            "type": "swift",
             "request": "launch",
             "program": "${workspaceFolder:Dedup}/.build/debug/Dedup",
             "args": [],
@@ -34,7 +34,7 @@
             "stopOnEntry": false
         },
         {
-            "type": "lldb",
+            "type": "swift",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:Dedup}",
