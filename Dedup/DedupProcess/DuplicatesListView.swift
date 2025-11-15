@@ -378,6 +378,30 @@ struct DuplicatesListView: View
         return destinationFolder.appendingPathComponent(file.displayName)
     }
     
+    /// Helper function to select which file to keep from a group of duplicates
+    /// Prefers files without "copy" in the name, unless all files have "copy"
+    private func selectFileToKeep(from files: [MediaFile], preferringFilesInTarget: [MediaFile]? = nil) -> MediaFile? {
+        // If we have a preference list (files already in target), use those first
+        let candidateFiles = preferringFilesInTarget ?? files
+        
+        // Check which files have "copy" in their name (case-insensitive)
+        let filesWithCopy = candidateFiles.filter { file in
+            file.displayName.lowercased().contains("copy")
+        }
+        let filesWithoutCopy = candidateFiles.filter { file in
+            !file.displayName.lowercased().contains("copy")
+        }
+        
+        // If we have files without "copy", prefer those
+        if !filesWithoutCopy.isEmpty {
+            return filesWithoutCopy.first
+        }
+        
+        // If all files have "copy" (or none have "copy" but we're using default logic),
+        // use the default: first file in the candidate list
+        return candidateFiles.first
+    }
+    
     private func processSelectedGroups() async
     {
         guard !selectedGroups.isEmpty, let targetURL = targetURL else { return }
@@ -410,9 +434,9 @@ struct DuplicatesListView: View
 
                 if filesInTarget.isEmpty
                 {
-                    // No files in target, move the first one
-                    fileToKeep = group.files.first
-                    filesToDelete = Array(group.files.dropFirst())
+                    // No files in target, select file to keep (preferring files without "copy")
+                    fileToKeep = selectFileToKeep(from: group.files)
+                    filesToDelete = group.files.filter { $0.id != fileToKeep?.id }
 
                     if let fileToMove = fileToKeep
                     {
@@ -442,8 +466,8 @@ struct DuplicatesListView: View
                 } // filesInTarget.isEmpty
                 else
                 {
-                    // At least one file already in target, keep it and delete all others
-                    fileToKeep = filesInTarget.first
+                    // At least one file already in target, prefer files without "copy" from those in target
+                    fileToKeep = selectFileToKeep(from: group.files, preferringFilesInTarget: filesInTarget)
                     filesToDelete = group.files.filter { $0.id != fileToKeep?.id }
                 }
 
