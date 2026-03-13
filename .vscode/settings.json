@@ -43,5 +43,6 @@
     },
     "remote.containers.defaultExtensions": [],
     "remote.containers.showStartNotification": false,
-    "remote.containers.ignoreSubmodules": true
+    "remote.containers.ignoreSubmodules": true,
+    "diffEditor.renderSideBySide": true
 }
