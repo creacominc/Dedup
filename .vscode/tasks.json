@@ -89,7 +89,7 @@
             "command": "bash",
             "args": [
                 "-c",
-                "find ~/Library/Developer/Xcode/DerivedData -name 'Dedup.app' -type d 2>/dev/null | head -1 | xargs -I {} cp -R {} ./build/Debug/Dedup.app 2>/dev/null || echo 'App not found in DerivedData'"
+                "APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name 'Dedup.app' -type d 2>/dev/null | head -1) && if [ -z \"$APP_PATH\" ]; then echo 'App not found in DerivedData' >&2; exit 1; fi && mkdir -p ./build/Debug && rm -rf ./build/Debug/Dedup.app && cp -R \"$APP_PATH\" ./build/Debug/Dedup.app && echo \"Copied app from: $APP_PATH\""
             ],
             "group": "build",
             "presentation": {
@@ -266,6 +266,88 @@
                 "Clean",
                 "Build Dedup",
                 "Test Unit Tests Only"
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        },
+        {
+            "label": "Build for Testing",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-configuration",
+                "Debug",
+                "-destination",
+                "platform=macOS",
+                "build-for-testing"
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Prepare Debug App for Testing",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name 'Dedup.app' -type d -path '*/Build/Products/Debug/*' -exec stat -f '%m %N' {} \\; 2>/dev/null | sort -rn | head -1 | sed 's/^[0-9]* //') && if [ -z \"$APP_PATH\" ]; then echo 'Error: Dedup.app not found in DerivedData after build-for-testing' >&2; exit 1; fi && mkdir -p ./build/Debug && rm -rf ./build/Debug/Dedup.app && cp -R \"$APP_PATH\" ./build/Debug/Dedup.app && echo \"Copied app from: $APP_PATH\""
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        },
+        {
+            "label": "Prepare Test Bundle",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "BUNDLE_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name 'DedupTests.xctest' -type d -path '*/Build/Products/Debug/*' -exec stat -f '%m %N' {} \\; 2>/dev/null | sort -rn | head -1 | sed 's/^[0-9]* //') && if [ -z \"$BUNDLE_PATH\" ]; then echo 'Error: DedupTests.xctest not found in DerivedData. Make sure Build for Testing completed successfully.' >&2; exit 1; fi && mkdir -p ./build/Debug/Dedup.app/Contents/PlugIns && rm -rf ./build/Debug/Dedup.app/Contents/PlugIns/DedupTests.xctest && cp -R \"$BUNDLE_PATH\" ./build/Debug/Dedup.app/Contents/PlugIns/ && echo \"Copied test bundle from: $BUNDLE_PATH\""
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        },
+        {
+            "label": "Build and Prepare Tests",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Build for Testing",
+                "Prepare Debug App for Testing",
+                "Prepare Test Bundle"
             ],
             "group": "test",
             "presentation": {
