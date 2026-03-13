@@ -109,6 +109,173 @@
                 "Prepare Debug App"
             ],
             "group": "build"
+        },
+        {
+            "label": "Clean",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "clean"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Build Release",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-configuration",
+                "Release",
+                "build"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Clean Build Release",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-configuration",
+                "Release",
+                "clean",
+                "build"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Test Unit Tests Only",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-destination",
+                "platform=macOS",
+                "-only-testing:DedupTests",
+                "test"
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Test UI Tests Only",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-project",
+                "Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-destination",
+                "platform=macOS",
+                "-only-testing:DedupUITests",
+                "test"
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Clean Build Test",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Clean",
+                "Build Dedup",
+                "Test Dedup"
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        },
+        {
+            "label": "Clean Build Test Unit Only",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Clean",
+                "Build Dedup",
+                "Test Unit Tests Only"
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
         }
     ]
 } 

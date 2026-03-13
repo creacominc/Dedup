@@ -42,6 +42,100 @@
             "preLaunchTask": "swift: Build Release Dedup",
             "target": "Dedup",
             "configuration": "release"
+        },
+        {
+            "name": "Run Unit Tests",
+            "type": "lldb",
+            "request": "launch",
+            "program": "/usr/bin/xcodebuild",
+            "args": [
+                "-project",
+                "${workspaceFolder}/Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-destination",
+                "platform=macOS",
+                "-only-testing:DedupTests",
+                "test"
+            ],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Build Dedup",
+            "stopOnEntry": false,
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Run UI Tests",
+            "type": "lldb",
+            "request": "launch",
+            "program": "/usr/bin/xcodebuild",
+            "args": [
+                "-project",
+                "${workspaceFolder}/Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-destination",
+                "platform=macOS",
+                "-only-testing:DedupUITests",
+                "test"
+            ],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Build Dedup",
+            "stopOnEntry": false,
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Run All Tests",
+            "type": "lldb",
+            "request": "launch",
+            "program": "/usr/bin/xcodebuild",
+            "args": [
+                "-project",
+                "${workspaceFolder}/Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-destination",
+                "platform=macOS",
+                "test"
+            ],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Build Dedup",
+            "stopOnEntry": false,
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Clean Build Test",
+            "type": "lldb",
+            "request": "launch",
+            "program": "/usr/bin/xcodebuild",
+            "args": [
+                "-project",
+                "${workspaceFolder}/Dedup.xcodeproj",
+                "-scheme",
+                "Dedup",
+                "-destination",
+                "platform=macOS",
+                "test"
+            ],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Clean Build Test",
+            "stopOnEntry": false,
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Debug Unit Tests",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/Dedup.app/Contents/PlugIns/DedupTests.xctest/Contents/MacOS/DedupTests",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Build Dedup",
+            "stopOnEntry": false,
+            "console": "integratedTerminal",
+            "justMyCode": false
         }
     ]
 }
