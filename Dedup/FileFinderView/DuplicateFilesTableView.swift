@@ -21,11 +21,6 @@ struct DuplicateFilesTableView: View {
     // [in] fileSetBySize - files grouped by size
     @Binding var fileSetBySize: FileSetBySize
     
-    // Sorting state
-    @State private var sortOrder: [KeyPathComparator<DuplicateFileRow>] = [
-        .init(\.fileSize, order: .forward)  // Default: sort by file size ascending
-    ]
-    
     // Compute the list of non-unique files with their checksum information
     private var duplicateFiles: [DuplicateFileRow] {
         var rows: [DuplicateFileRow] = []
@@ -54,7 +49,7 @@ struct DuplicateFilesTableView: View {
             }
         }
         
-        return rows.sorted(using: sortOrder)
+        return rows.sorted { $0.fileSize < $1.fileSize }
     }
 
     var body: some View {
@@ -67,18 +62,18 @@ struct DuplicateFilesTableView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
             
-            Table(duplicateFiles, sortOrder: $sortOrder) {
+            Table(duplicateFiles) {
                 TableColumn("File Name", value: \.fileName)
                 TableColumn("Path", value: \.filePath)
-                TableColumn("File Size", value: \.fileSize) { row in
+                TableColumn("File Size") { row in
                     Text(ByteCountFormatter.string(fromByteCount: Int64(row.fileSize), countStyle: .file))
                 }
                 .width(min: 80, max: 120)
-                TableColumn("Max Checksum Size", value: \.maxChecksumSize) { row in
+                TableColumn("Max Checksum Size") { row in
                     Text(ByteCountFormatter.string(fromByteCount: Int64(row.maxChecksumSize), countStyle: .file))
                 }
                 .width(min: 100, max: 150)
-                TableColumn("Checksum at Max Size", value: \.checksumAtMaxSize) { row in
+                TableColumn("Checksum at Max Size") { row in
                     Text(row.checksumAtMaxSize.prefix(16) + "...")
                         .font(.system(.caption, design: .monospaced))
                         .help(row.checksumAtMaxSize)

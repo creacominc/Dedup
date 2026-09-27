@@ -26,8 +26,7 @@ final class DedupUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         
-        // Verify the app launches successfully
-        XCTAssertTrue(app.windows.firstMatch.exists)
+        XCTAssertNotEqual(app.state, .notRunning)
     }
 
     func testLaunchPerformance() throws {

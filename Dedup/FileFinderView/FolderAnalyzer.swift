@@ -18,7 +18,7 @@ class FolderAnalyzer
     var fileSizeDistribution: [String: Int] = [:]
     private var currentAnalysisURL: URL?
     
-    func analyzeFolderStats(url: URL, into fileSetBySize: FileSetBySize, completion: (() -> Void)? = nil)
+    func analyzeFolderStats(url: URL, into fileSetBySize: FileSetBySize, completion: (@MainActor @Sendable () -> Void)? = nil)
     {
         // Prevent concurrent analyses
         guard !isAnalyzing else {
@@ -65,7 +65,7 @@ class FolderAnalyzer
                     if mediaFile.isDirectory // let isDirectory = resourceValues.isDirectory, isDirectory
                     {
                         // Check if this looks like a CinemaDNG folder
-                        if self.isCinemaDNGFolder(url: fileURL, fileManager: fileManager)
+                        if Self.isCinemaDNGFolder(url: fileURL, fileManager: fileManager)
                         {
                             print("Skipping CinemaDNG folder: \(fileURL.lastPathComponent)")
                             enumerator.skipDescendants()
@@ -132,7 +132,7 @@ class FolderAnalyzer
     // MARK: - Private Helper Methods
     
     /// Detects if a folder is a CinemaDNG folder by checking for characteristic file patterns
-    private func isCinemaDNGFolder(url: URL, fileManager: FileManager) -> Bool
+    nonisolated private static func isCinemaDNGFolder(url: URL, fileManager: FileManager) -> Bool
     {
         do
         {
@@ -170,4 +170,3 @@ class FolderAnalyzer
         }
     }
 }
-
