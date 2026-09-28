@@ -54,9 +54,18 @@ struct ContentView: View {
     private var statusBar: some View {
         HStack {
             if model.activity != .idle {
-                ProgressView(value: Double(model.progressCompleted), total: Double(max(model.progressTotal, 1))).frame(width: 180)
+                ProgressView()
+                    .controlSize(.small)
+                ProgressView(value: Double(model.progressCompleted), total: Double(max(model.progressTotal, 1)))
+                    .frame(width: 180)
             }
             Text(model.status).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+            if let lastActivityAt = model.lastActivityAt, model.activity != .idle {
+                Text(lastActivityAt, style: .timer)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .help("Time since the most recent progress update")
+            }
             Spacer()
         }
         .padding(.horizontal)

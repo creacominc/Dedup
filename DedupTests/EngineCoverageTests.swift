@@ -284,6 +284,31 @@ struct PlanningCoverageTests {
 }
 
 struct ExecutorCoverageTests {
+    @Test func `Executor reports an atomic move on the same filesystem`() async throws {
+        try await TemporaryFixture.withFixture { fixture in
+            let source = fixture.source.appending(path: "progress.mov")
+            let destination = fixture.target.appending(path: "progress.mov")
+            try Data([1, 2, 3, 4]).write(to: source)
+            let operation = PlannedOperation(kind: .moveToLibrary, source: source, destination: destination, byteCount: 4, expectedDigest: nil, explanation: "test")
+            let recorder = OperationProgressRecorder()
+
+            _ = await OperationExecutor().execute(
+                plan: OperationPlan(operations: [operation], createdAt: .now),
+                dryRun: false
+            ) { update in
+                await recorder.append(update)
+            }
+
+            let updates = await recorder.values
+            #expect(updates.contains { $0.message.contains("Moving progress.mov on the same filesystem") })
+            #expect(updates.last?.completed == 1)
+            #expect(updates.last?.result?.performed == true)
+            #expect(updates.last?.result?.message.contains("Moved atomically") == true)
+            #expect(!FileManager.default.fileExists(atPath: source.path()))
+            #expect(try Data(contentsOf: destination) == Data([1, 2, 3, 4]))
+        }
+    }
+
     @Test func `Digest mismatch leaves source intact and removes staging file`() async throws {
         try await TemporaryFixture.withFixture { fixture in
             let source = fixture.source.appending(path: "source.mov")
@@ -291,12 +316,86 @@ struct ExecutorCoverageTests {
             try Data([1, 2, 3]).write(to: source)
             let operation = PlannedOperation(kind: .moveToLibrary, source: source, destination: destination, byteCount: 3, expectedDigest: "wrong", explanation: "test")
 
-            let results = await OperationExecutor().execute(plan: OperationPlan(operations: [operation], createdAt: .now), dryRun: false)
+            let results = await OperationExecutor(forceVerifiedCopy: true).execute(plan: OperationPlan(operations: [operation], createdAt: .now), dryRun: false)
 
             #expect(FileManager.default.fileExists(atPath: source.path()))
             #expect(!FileManager.default.fileExists(atPath: destination.path()))
             #expect(results.first?.performed == false)
             #expect(try FileManager.default.contentsOfDirectory(at: fixture.target, includingPropertiesForKeys: nil).isEmpty)
+        }
+    }
+
+    @Test func `Verified copy reports each phase and removes source only after verification`() async throws {
+        try await TemporaryFixture.withFixture { fixture in
+            let source = fixture.source.appending(path: "cross-volume.mov")
+            let destination = fixture.target.appending(path: "Nested/cross-volume.mov")
+            let bytes = Data((0..<2_097_152).map { UInt8($0 % 251) })
+            try bytes.write(to: source)
+            let operation = PlannedOperation(
+                kind: .moveToLibrary,
+                source: source,
+                destination: destination,
+                byteCount: Int64(bytes.count),
+                expectedDigest: nil,
+                explanation: "test"
+            )
+            let recorder = OperationProgressRecorder()
+
+            let results = await OperationExecutor(forceVerifiedCopy: true).execute(
+                plan: OperationPlan(operations: [operation], createdAt: .now),
+                dryRun: false
+            ) { update in
+                await recorder.append(update)
+            }
+
+            let messages = await recorder.values.map(\.message)
+            #expect(messages.contains { $0.contains("Different filesystems; copying") })
+            #expect(messages.contains { $0.contains("Copying cross-volume.mov") })
+            #expect(messages.contains { $0.contains("Hashing source") })
+            #expect(messages.contains { $0.contains("Hashing staged copy") })
+            #expect(messages.contains { $0.contains("Committing") })
+            #expect(messages.contains { $0.contains("Removing verified source") })
+            #expect(results.first?.performed == true)
+            #expect(results.first?.message == "Copied, verified, and committed")
+            #expect(!FileManager.default.fileExists(atPath: source.path()))
+            #expect(try Data(contentsOf: destination) == bytes)
+        }
+    }
+
+    @Test func `Skip and conflict operations never change files`() async throws {
+        try await TemporaryFixture.withFixture { fixture in
+            let skippedSource = fixture.source.appending(path: "skip.mov")
+            let conflictSource = fixture.source.appending(path: "conflict.mov")
+            try Data([1]).write(to: skippedSource)
+            try Data([2]).write(to: conflictSource)
+            let skipped = PlannedOperation(
+                kind: .skipExisting,
+                source: skippedSource,
+                destination: nil,
+                byteCount: 1,
+                expectedDigest: nil,
+                explanation: "Identical target exists"
+            )
+            let conflict = PlannedOperation(
+                kind: .conflict,
+                source: conflictSource,
+                destination: fixture.target.appending(path: "conflict.mov"),
+                byteCount: 1,
+                expectedDigest: nil,
+                explanation: "Requires review"
+            )
+
+            let results = await OperationExecutor().execute(
+                plan: OperationPlan(operations: [skipped, conflict], createdAt: .now),
+                dryRun: false
+            )
+
+            #expect(results.count == 2)
+            #expect(results.allSatisfy { !$0.performed })
+            #expect(results.map(\.message) == ["Identical target exists", "Requires review"])
+            #expect(FileManager.default.fileExists(atPath: skippedSource.path()))
+            #expect(FileManager.default.fileExists(atPath: conflictSource.path()))
+            #expect(!FileManager.default.fileExists(atPath: fixture.target.appending(path: "conflict.mov").path()))
         }
     }
 
@@ -357,6 +456,11 @@ struct VolumeFixtureIntegrationTests {
 private actor ProgressRecorder {
     private(set) var values: [AnalysisProgress] = []
     func append(_ progress: AnalysisProgress) { values.append(progress) }
+}
+
+private actor OperationProgressRecorder {
+    private(set) var values: [OperationProgress] = []
+    func append(_ progress: OperationProgress) { values.append(progress) }
 }
 
 private struct TemporaryFixture: Sendable {

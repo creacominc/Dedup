@@ -17,6 +17,7 @@ final class DedupAppModel {
     var status = "Choose a source and the Originals target folder."
     var progressCompleted = 0
     var progressTotal = 0
+    var lastActivityAt: Date?
     var dryRun = true
     var selectedSection: SidebarSection? = .overview
 
@@ -111,9 +112,23 @@ final class DedupAppModel {
                 self.workTask = nil
                 return
             }
-            let output = await executor.execute(plan: plan, dryRun: dryRun)
+            self.progressCompleted = 0
+            self.progressTotal = plan.operations.count
+            let output = await executor.execute(plan: plan, dryRun: dryRun) { update in
+                await MainActor.run {
+                    self.progressCompleted = update.completed
+                    self.progressTotal = update.total
+                    self.lastActivityAt = .now
+                    self.status = "\(self.dryRun ? "Dry run" : "Executing verified transfers") — \(update.message) (\(update.completed) of \(update.total))"
+                    self.updateResult(for: update.operation, message: update.message, finalResult: update.result)
+                }
+            }
             self.results = output
-            self.status = dryRun ? "Dry run complete; no files changed." : "Execution complete: \(output.count(where: \.performed)) verified transfers."
+            if Task.isCancelled {
+                self.status = "Execution cancelled. Partial staging data was removed and the source was left unchanged."
+            } else {
+                self.status = dryRun ? "Dry run complete; no files changed." : "Execution complete: \(output.count(where: \.performed)) verified transfers."
+            }
             self.activity = .idle
             self.workTask = nil
         }
@@ -121,11 +136,21 @@ final class DedupAppModel {
 
     func cancel() {
         workTask?.cancel()
-        status = "Cancelling…"
+        lastActivityAt = .now
+        status = "Cancelling current file safely…"
     }
 
     func result(for operation: PlannedOperation) -> OperationResult? {
         results.first { $0.operation.id == operation.id }
+    }
+
+    private func updateResult(for operation: PlannedOperation, message: String, finalResult: OperationResult?) {
+        let updated = finalResult ?? OperationResult(operation: operation, performed: false, message: message)
+        if let index = results.firstIndex(where: { $0.operation.id == operation.id }) {
+            results[index] = updated
+        } else {
+            results.append(updated)
+        }
     }
 
     var operationReport: String {
