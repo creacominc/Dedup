@@ -1,6 +1,12 @@
 import CryptoKit
 import Foundation
+import OSLog
 internal import UniformTypeIdentifiers
+
+private nonisolated func elapsedMilliseconds(since start: ContinuousClock.Instant) -> Double {
+    let components = start.duration(to: .now).components
+    return Double(components.seconds) * 1_000 + Double(components.attoseconds) / 1_000_000_000_000_000
+}
 
 enum MediaKind: String, Codable, CaseIterable, Sendable {
     case audio = "Audio"
@@ -225,6 +231,7 @@ struct ProgressiveHasher: Sendable {
 }
 
 actor HashCache {
+    private static let logger = Logger(subsystem: "Dedup", category: "HashCache")
     private struct Entry: Codable {
         let size: Int64
         let modified: Date
@@ -233,6 +240,7 @@ actor HashCache {
 
     private var entries: [String: Entry] = [:]
     private let storeURL: URL
+    private var persistCount = 0
 
     init(storeURL: URL? = nil) {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
@@ -264,11 +272,15 @@ actor HashCache {
     }
 
     private func persist() async {
+        let startedAt = ContinuousClock.now
         do {
             try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             let data = try JSONEncoder().encode(entries)
             try data.write(to: storeURL, options: .atomic)
+            persistCount += 1
+            Self.logger.debug("Cache save #\(self.persistCount): \(self.entries.count) entries, \(data.count) bytes, \(elapsedMilliseconds(since: startedAt), format: .fixed(precision: 2)) ms")
         } catch {
+            Self.logger.error("Cache save failed after \(elapsedMilliseconds(since: startedAt), format: .fixed(precision: 2)) ms: \(error.localizedDescription, privacy: .public)")
             // Cache persistence is an optimization; analysis results remain valid without it.
         }
     }
@@ -286,6 +298,89 @@ struct AnalysisReport: Sendable {
     let uniqueSourceFiles: [MediaRecord]
     let duplicateGroups: [DuplicateGroupResult]
     let issues: [ScanIssue]
+    let discoveredSourceFileCount: Int
+    let discoveredSourceByteCount: Int64
+
+    nonisolated init(
+        sourceFiles: [MediaRecord],
+        targetFiles: [MediaRecord],
+        uniqueSourceFiles: [MediaRecord],
+        duplicateGroups: [DuplicateGroupResult],
+        issues: [ScanIssue],
+        discoveredSourceFileCount: Int? = nil,
+        discoveredSourceByteCount: Int64? = nil
+    ) {
+        self.sourceFiles = sourceFiles
+        self.targetFiles = targetFiles
+        self.uniqueSourceFiles = uniqueSourceFiles
+        self.duplicateGroups = duplicateGroups
+        self.issues = issues
+        self.discoveredSourceFileCount = discoveredSourceFileCount ?? sourceFiles.count
+        self.discoveredSourceByteCount = discoveredSourceByteCount ?? sourceFiles.reduce(0) { $0 + $1.byteCount }
+    }
+
+    nonisolated var isSourceLimited: Bool {
+        sourceFiles.count < discoveredSourceFileCount
+    }
+
+    nonisolated var selectedSourceByteCount: Int64 {
+        sourceFiles.reduce(0) { $0 + $1.byteCount }
+    }
+
+    nonisolated var excludedSourceFileCount: Int {
+        max(0, discoveredSourceFileCount - sourceFiles.count)
+    }
+
+    nonisolated var excludedSourceByteCount: Int64 {
+        max(0, discoveredSourceByteCount - selectedSourceByteCount)
+    }
+}
+
+struct AnalysisLimits: Equatable, Sendable {
+    var maximumSourceFiles: Int?
+    var maximumSourceBytes: Int64?
+    var maximumIndividualSourceFileBytes: Int64?
+
+    nonisolated init(
+        maximumSourceFiles: Int?,
+        maximumSourceBytes: Int64?,
+        maximumIndividualSourceFileBytes: Int64? = nil
+    ) {
+        self.maximumSourceFiles = maximumSourceFiles
+        self.maximumSourceBytes = maximumSourceBytes
+        self.maximumIndividualSourceFileBytes = maximumIndividualSourceFileBytes
+    }
+
+    nonisolated static let unlimited = AnalysisLimits(
+        maximumSourceFiles: nil,
+        maximumSourceBytes: nil,
+        maximumIndividualSourceFileBytes: nil
+    )
+
+    nonisolated func applying(to records: [MediaRecord]) -> [MediaRecord] {
+        let sorted = records.sorted {
+            if $0.byteCount != $1.byteCount { return $0.byteCount > $1.byteCount }
+            return $0.url.path(percentEncoded: false) < $1.url.path(percentEncoded: false)
+        }
+        return applying(toRecordsSortedByDescendingSize: sorted)
+    }
+
+    nonisolated func applying(toRecordsSortedByDescendingSize sorted: [MediaRecord]) -> [MediaRecord] {
+        let fileLimit = maximumSourceFiles.map { max(0, $0) }
+        let byteLimit = maximumSourceBytes.map { max(0, $0) }
+        let individualFileLimit = maximumIndividualSourceFileBytes.map { max(0, $0) }
+        var selected: [MediaRecord] = []
+        var selectedBytes: Int64 = 0
+
+        for record in sorted {
+            if let fileLimit, selected.count >= fileLimit { break }
+            if let individualFileLimit, record.byteCount > individualFileLimit { continue }
+            if let byteLimit, record.byteCount > byteLimit - selectedBytes { continue }
+            selected.append(record)
+            selectedBytes += record.byteCount
+        }
+        return selected
+    }
 }
 
 struct AnalysisProgress: Sendable {
@@ -294,7 +389,25 @@ struct AnalysisProgress: Sendable {
     let total: Int
 }
 
+struct AnalysisIndex: Sendable {
+    let sourceResult: ScanResult
+    let targetResult: ScanResult
+
+    nonisolated var sourceByteCount: Int64 {
+        sourceResult.records.reduce(0) { $0 + $1.byteCount }
+    }
+
+    nonisolated var smallestSourceFileByteCount: Int64? {
+        sourceResult.records.map(\.byteCount).min()
+    }
+
+    nonisolated var largestSourceFileByteCount: Int64? {
+        sourceResult.records.map(\.byteCount).max()
+    }
+}
+
 actor DeduplicationEngine {
+    private static let logger = Logger(subsystem: "Dedup", category: "Analysis")
     private let scanner = MediaScanner()
     private let hasher = ProgressiveHasher()
     private let cache = HashCache()
@@ -303,44 +416,115 @@ actor DeduplicationEngine {
     func analyze(
         source: URL,
         target: URL,
+        limits: AnalysisLimits = .unlimited,
         progress: @escaping @Sendable (AnalysisProgress) async -> Void
     ) async throws -> AnalysisReport {
-        await progress(AnalysisProgress(phase: "Scanning source", completed: 0, total: 2))
-        async let sourceScan = scanner.scan(root: source)
-        async let targetScan = scanner.scan(root: target)
-        let (sourceResult, targetResult) = try await (sourceScan, targetScan)
-        await progress(AnalysisProgress(phase: "Comparing equal-size candidates", completed: 0, total: sourceResult.records.count))
+        let index = try await index(source: source, target: target, progress: progress)
+        return try await analyze(index: index, limits: limits, progress: progress)
+    }
 
-        let sourceIDs = Set(sourceResult.records.map(\.id))
-        let allRecords = sourceResult.records + targetResult.records
-        let bySize = Dictionary(grouping: allRecords, by: \.byteCount)
+    func index(
+        source: URL,
+        target: URL,
+        progress: @escaping @Sendable (AnalysisProgress) async -> Void
+    ) async throws -> AnalysisIndex {
+        let indexStartedAt = ContinuousClock.now
+        await progress(AnalysisProgress(phase: "Indexing source and target folders", completed: 0, total: 2))
+        async let sourceScan = indexSource(root: source)
+        async let targetScan = timedScan(root: target, label: "target")
+        let (sourceResult, targetResult) = try await (sourceScan, targetScan)
+        await progress(AnalysisProgress(phase: "Folder index complete", completed: 2, total: 2))
+        let index = AnalysisIndex(sourceResult: sourceResult, targetResult: targetResult)
+        Self.logger.notice("Index complete: source=\(sourceResult.records.count) files/\(index.sourceByteCount) bytes, target=\(targetResult.records.count) files, elapsed=\(elapsedMilliseconds(since: indexStartedAt), format: .fixed(precision: 2)) ms")
+        return index
+    }
+
+    func indexSource(root: URL) async throws -> ScanResult {
+        let result = try await timedScan(root: root, label: "source")
+        let sortedRecords = result.records.sorted {
+            if $0.byteCount != $1.byteCount { return $0.byteCount > $1.byteCount }
+            return $0.url.path(percentEncoded: false) < $1.url.path(percentEncoded: false)
+        }
+        return ScanResult(records: sortedRecords, issues: result.issues)
+    }
+
+    func indexTarget(root: URL, kinds: Set<MediaKind>) async throws -> ScanResult {
+        var records: [MediaRecord] = []
+        var issues: [ScanIssue] = []
+
+        for kind in MediaKind.allCases where kinds.contains(kind) {
+            try Task.checkCancellation()
+            let folder = root.appending(path: kind.rawValue, directoryHint: .isDirectory)
+            guard FileManager.default.fileExists(atPath: folder.path(percentEncoded: false)) else {
+                continue
+            }
+            let result = try await timedScan(root: folder, label: "target \(kind.rawValue)")
+            records.append(contentsOf: result.records)
+            issues.append(contentsOf: result.issues)
+        }
+
+        return ScanResult(records: records, issues: issues)
+    }
+
+    func analyze(
+        index: AnalysisIndex,
+        limits: AnalysisLimits = .unlimited,
+        progress: @escaping @Sendable (AnalysisProgress) async -> Void
+    ) async throws -> AnalysisReport {
+        let analysisStartedAt = ContinuousClock.now
+        let sourceResult = index.sourceResult
+        let targetResult = index.targetResult
+        let sourceRecords = limits.applying(toRecordsSortedByDescendingSize: sourceResult.records)
+        await progress(AnalysisProgress(phase: "Comparing equal-size candidates", completed: 0, total: sourceRecords.count))
+
+        let sourceIDs = Set(sourceRecords.map(\.id))
+        let sourceBySize = Dictionary(grouping: sourceRecords, by: \.byteCount)
+        let targetBySize = Dictionary(grouping: targetResult.records, by: \.byteCount)
         var uniqueIDs = Set<String>()
         var duplicates: [DuplicateGroupResult] = []
         var issues = sourceResult.issues + targetResult.issues
         var processed = 0
+        var candidateGroups: [(size: Int64, files: [MediaRecord], sourceCount: Int)] = []
 
-        for (_, sameSizeFiles) in bySize {
-            try Task.checkCancellation()
-            if sameSizeFiles.count == 1 {
-                if sourceIDs.contains(sameSizeFiles[0].id) { uniqueIDs.insert(sameSizeFiles[0].id) }
-                processed += sameSizeFiles.count
+        for (size, sourceFiles) in sourceBySize {
+            guard let targetFiles = targetBySize[size], !targetFiles.isEmpty else {
+                uniqueIDs.formUnion(sourceFiles.map(\.id))
+                processed += sourceFiles.count
+                Self.logger.debug("Size \(size) bytes skipped: \(sourceFiles.count) source files and no target files")
                 continue
             }
+            candidateGroups.append((size, sourceFiles + targetFiles, sourceFiles.count))
+            Self.logger.debug("Size \(size) bytes selected: \(sourceFiles.count) source files, \(targetFiles.count) target files")
+        }
+        Self.logger.notice("Checksum candidates: \(sourceRecords.count) selected source files, \(candidateGroups.count) shared-size groups, \(processed) source files skipped without matching target sizes")
+
+        for candidateGroup in candidateGroups.sorted(by: { $0.size > $1.size }) {
+            try Task.checkCancellation()
+            let sameSizeFiles = candidateGroup.files
 
             var candidates = [sameSizeFiles]
             let stages = ProgressiveHasher.defaultCheckpoints.filter { $0 < sameSizeFiles[0].byteCount } + [sameSizeFiles[0].byteCount]
             for stage in stages {
+                let stageStartedAt = ContinuousClock.now
+                var stageCacheHits = 0
+                var stageCacheMisses = 0
+                var stageBytesRead: Int64 = 0
+                var stageFilesSubmitted = 0
                 var nextCandidates: [[MediaRecord]] = []
-                for candidateGroup in candidates {
-                    let results = await hashInBatches(
-                        candidateGroup,
+                for files in candidates {
+                    let output = await hashInBatches(
+                        files,
                         byteCount: stage,
-                        completed: min(processed, sourceResult.records.count),
-                        total: sourceResult.records.count,
+                        completed: min(processed, sourceRecords.count),
+                        total: sourceRecords.count,
                         progress: progress
                     )
+                    stageFilesSubmitted += files.count
+                    stageCacheHits += output.cacheHits
+                    stageCacheMisses += output.cacheMisses
+                    stageBytesRead += output.bytesRead
                     var grouped: [String: [MediaRecord]] = [:]
-                    for (record, digest, errorMessage) in results {
+                    for (record, digest, errorMessage) in output.values {
                         if let digest {
                             grouped[digest, default: []].append(record)
                         } else if let errorMessage {
@@ -350,35 +534,40 @@ actor DeduplicationEngine {
                     for group in grouped.values {
                         if group.count == 1 {
                             if sourceIDs.contains(group[0].id) { uniqueIDs.insert(group[0].id) }
-                        } else {
+                        } else if group.contains(where: { sourceIDs.contains($0.id) }) {
                             nextCandidates.append(group)
                         }
                     }
                 }
+                Self.logger.notice("Hash stage: fileSize=\(candidateGroup.size) bytes, checkpoint=\(stage) bytes, submitted=\(stageFilesSubmitted), cacheHits=\(stageCacheHits), cacheMisses=\(stageCacheMisses), bytesRead=\(stageBytesRead), survivors=\(nextCandidates.reduce(0) { $0 + $1.count }), elapsed=\(elapsedMilliseconds(since: stageStartedAt), format: .fixed(precision: 2)) ms")
                 candidates = nextCandidates
                 if candidates.isEmpty { break }
             }
 
-            for group in candidates where group.count > 1 {
+            for group in candidates where group.count > 1 && group.contains(where: { sourceIDs.contains($0.id) }) {
                 let digest = await cachedDigest(for: group[0], byteCount: group[0].byteCount) ?? ""
                 guard !digest.isEmpty else { continue }
                 duplicates.append(DuplicateGroupResult(digest: digest, files: group.sorted { $0.url.path() < $1.url.path() }))
             }
-            processed += sameSizeFiles.count
-            await progress(AnalysisProgress(phase: "Comparing equal-size candidates", completed: min(processed, sourceResult.records.count), total: sourceResult.records.count))
+            processed += candidateGroup.sourceCount
+            await progress(AnalysisProgress(phase: "Comparing equal-size candidates", completed: min(processed, sourceRecords.count), total: sourceRecords.count))
         }
 
         let duplicateIDs = Set(duplicates.flatMap(\.files).map(\.id))
-        for sourceFile in sourceResult.records where !duplicateIDs.contains(sourceFile.id) {
+        for sourceFile in sourceRecords where !duplicateIDs.contains(sourceFile.id) {
             uniqueIDs.insert(sourceFile.id)
         }
-        return AnalysisReport(
-            sourceFiles: sourceResult.records,
+        let report = AnalysisReport(
+            sourceFiles: sourceRecords,
             targetFiles: targetResult.records,
-            uniqueSourceFiles: sourceResult.records.filter { uniqueIDs.contains($0.id) },
+            uniqueSourceFiles: sourceRecords.filter { uniqueIDs.contains($0.id) },
             duplicateGroups: duplicates.sorted { ($0.files.first?.byteCount ?? 0) > ($1.files.first?.byteCount ?? 0) },
-            issues: issues
+            issues: issues,
+            discoveredSourceFileCount: sourceResult.records.count,
+            discoveredSourceByteCount: index.sourceByteCount
         )
+        Self.logger.notice("Checksum analysis complete: selectedSource=\(sourceRecords.count), duplicateGroups=\(duplicates.count), issues=\(issues.count), elapsed=\(elapsedMilliseconds(since: analysisStartedAt), format: .fixed(precision: 2)) ms")
+        return report
     }
 
     private func hashInBatches(
@@ -387,8 +576,11 @@ actor DeduplicationEngine {
         completed: Int,
         total: Int,
         progress: @escaping @Sendable (AnalysisProgress) async -> Void
-    ) async -> [(MediaRecord, String?, String?)] {
+    ) async -> (values: [(MediaRecord, String?, String?)], cacheHits: Int, cacheMisses: Int, bytesRead: Int64) {
         var output: [(MediaRecord, String?, String?)] = []
+        var cacheHits = 0
+        var cacheMisses = 0
+        var bytesRead: Int64 = 0
         for start in stride(from: 0, to: records.count, by: maximumConcurrentReads) {
             let batch = Array(records[start..<min(start + maximumConcurrentReads, records.count)])
             if let first = batch.first {
@@ -401,30 +593,42 @@ actor DeduplicationEngine {
                     total: total
                 ))
             }
-            let values = await withTaskGroup(of: (MediaRecord, String?, String?).self) { group in
+            let values = await withTaskGroup(of: (MediaRecord, String?, String?, Bool, Int64).self) { group in
                 for record in batch {
                     group.addTask { [hasher, cache] in
                         if let cached = await cache.digest(for: record, byteCount: byteCount) {
-                            return (record, cached, nil)
+                            return (record, cached, nil, true, 0)
                         }
                         do {
                             let checkpoint = try await hasher.prefixDigest(for: record, byteLimit: byteCount)
                             await cache.store(checkpoint, for: record)
-                            return (record, checkpoint.digest, nil)
+                            return (record, checkpoint.digest, nil, false, checkpoint.byteCount)
                         } catch {
-                            return (record, nil, error.localizedDescription)
+                            return (record, nil, error.localizedDescription, false, 0)
                         }
                     }
                 }
-                var batchResults: [(MediaRecord, String?, String?)] = []
+                var batchResults: [(MediaRecord, String?, String?, Bool, Int64)] = []
                 for await result in group {
                     batchResults.append(result)
                 }
                 return batchResults
             }
-            output.append(contentsOf: values)
+            for (record, digest, errorMessage, wasCacheHit, bytesReadForRecord) in values {
+                output.append((record, digest, errorMessage))
+                cacheHits += wasCacheHit ? 1 : 0
+                cacheMisses += wasCacheHit ? 0 : 1
+                bytesRead += bytesReadForRecord
+            }
         }
-        return output
+        return (output, cacheHits, cacheMisses, bytesRead)
+    }
+
+    private func timedScan(root: URL, label: String) async throws -> ScanResult {
+        let startedAt = ContinuousClock.now
+        let result = try await scanner.scan(root: root)
+        Self.logger.notice("\(label, privacy: .public) index: \(result.records.count) files, \(result.issues.count) issues, \(elapsedMilliseconds(since: startedAt), format: .fixed(precision: 2)) ms")
+        return result
     }
 
     private func cachedDigest(for record: MediaRecord, byteCount: Int64) async -> String? {

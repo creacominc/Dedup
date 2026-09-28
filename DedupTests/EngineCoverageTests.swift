@@ -511,6 +511,121 @@ struct AppModelCoverageTests {
     }
 }
 
+struct AnalysisLimitTests {
+    @Test func `Limits select largest files deterministically within both caps`() throws {
+        let fixture = try TemporaryFixture()
+        defer { fixture.remove() }
+        let small = try fixture.makeRecord(name: "small.mov", bytes: [1])
+        let medium = try fixture.makeRecord(name: "medium.mov", bytes: [1, 2])
+        let large = try fixture.makeRecord(name: "large.mov", bytes: [1, 2, 3])
+
+        let selected = AnalysisLimits(maximumSourceFiles: 2, maximumSourceBytes: 5)
+            .applying(to: [small, large, medium])
+
+        #expect(selected.map(\.displayName) == ["large.mov", "medium.mov"])
+    }
+
+    @Test func `Byte cap skips oversized records and can fill with smaller files`() throws {
+        let fixture = try TemporaryFixture()
+        defer { fixture.remove() }
+        let oversized = try fixture.makeRecord(name: "oversized.mov", bytes: [1, 2, 3, 4])
+        let fitting = try fixture.makeRecord(name: "fitting.mov", bytes: [1, 2, 3])
+
+        let selected = AnalysisLimits(maximumSourceFiles: nil, maximumSourceBytes: 3)
+            .applying(to: [oversized, fitting])
+
+        #expect(selected.map(\.displayName) == ["fitting.mov"])
+    }
+
+    @Test func `Individual file cap excludes large files independently of pass cap`() throws {
+        let fixture = try TemporaryFixture()
+        defer { fixture.remove() }
+        let tooLarge = try fixture.makeRecord(name: "too-large.mov", bytes: [1, 2, 3, 4])
+        let eligible = try fixture.makeRecord(name: "eligible.mov", bytes: [1, 2, 3])
+
+        let selected = AnalysisLimits(
+            maximumSourceFiles: nil,
+            maximumSourceBytes: 100,
+            maximumIndividualSourceFileBytes: 3
+        ).applying(to: [tooLarge, eligible])
+
+        #expect(selected.map(\.displayName) == ["eligible.mov"])
+    }
+
+    @Test func `Index reports size range and can be reused for limited checksum analysis`() async throws {
+        try await TemporaryFixture.withFixture { fixture in
+            _ = try fixture.makeRecord(name: "small.mov", bytes: [1])
+            _ = try fixture.makeRecord(name: "large.mov", bytes: [1, 2, 3, 4])
+            let engine = DeduplicationEngine()
+
+            let index = try await engine.index(source: fixture.source, target: fixture.target) { _ in }
+            let report = try await engine.analyze(
+                index: index,
+                limits: AnalysisLimits(maximumSourceFiles: 1, maximumSourceBytes: nil)
+            ) { _ in }
+
+            #expect(index.sourceResult.records.map(\.displayName) == ["large.mov", "small.mov"])
+            #expect(index.smallestSourceFileByteCount == 1)
+            #expect(index.largestSourceFileByteCount == 4)
+            #expect(index.sourceByteCount == 5)
+            #expect(report.sourceFiles.map(\.displayName) == ["large.mov"])
+            #expect(report.excludedSourceFileCount == 1)
+        }
+    }
+
+    @Test func `Destination indexing scans only folders matching source media kinds`() async throws {
+        try await TemporaryFixture.withFixture { fixture in
+            let audioFolder = fixture.target.appending(path: MediaKind.audio.rawValue, directoryHint: .isDirectory)
+            let photoFolder = fixture.target.appending(path: MediaKind.photo.rawValue, directoryHint: .isDirectory)
+            let videoFolder = fixture.target.appending(path: MediaKind.video.rawValue, directoryHint: .isDirectory)
+            for folder in [audioFolder, photoFolder, videoFolder] {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            }
+            _ = try fixture.makeRecord(name: "sound.wav", bytes: [1], in: audioFolder)
+            _ = try fixture.makeRecord(name: "still.jpg", bytes: [2], in: photoFolder)
+            _ = try fixture.makeRecord(name: "clip.mov", bytes: [3], in: videoFolder)
+
+            let result = try await DeduplicationEngine().indexTarget(
+                root: fixture.target,
+                kinds: [.audio, .video]
+            )
+
+            #expect(Set(result.records.map(\.displayName)) == ["sound.wav", "clip.mov"])
+        }
+    }
+}
+
+struct CandidateFilteringTests {
+    @Test func `Source files without a target of the same size skip checksum comparison`() async throws {
+        try await TemporaryFixture.withFixture { fixture in
+            _ = try fixture.makeRecord(name: "first.mov", bytes: [1, 2, 3])
+            _ = try fixture.makeRecord(name: "second.mov", bytes: [4, 5, 6])
+            let engine = DeduplicationEngine()
+
+            let index = try await engine.index(source: fixture.source, target: fixture.target) { _ in }
+            let report = try await engine.analyze(index: index) { _ in }
+
+            #expect(report.duplicateGroups.isEmpty)
+            #expect(Set(report.uniqueSourceFiles.map(\.displayName)) == Set(["first.mov", "second.mov"]))
+        }
+    }
+
+    @Test func `Target-only duplicate sizes are not reported or processed as source candidates`() async throws {
+        try await TemporaryFixture.withFixture { fixture in
+            _ = try fixture.makeRecord(name: "source.mov", bytes: [1, 2, 3])
+            _ = try fixture.makeRecord(name: "target-a.mov", bytes: [7, 8], in: fixture.target)
+            _ = try fixture.makeRecord(name: "target-b.mov", bytes: [7, 8], in: fixture.target)
+            let engine = DeduplicationEngine()
+
+            let index = try await engine.index(source: fixture.source, target: fixture.target) { _ in }
+            let report = try await engine.analyze(index: index) { _ in }
+
+            #expect(report.duplicateGroups.isEmpty)
+            #expect(report.uniqueSourceFiles.map(\.displayName) == ["source.mov"])
+        }
+    }
+}
+
 @Suite(.serialized)
 struct VolumeFixtureIntegrationTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["DEDUP_RUN_VOLUME_TESTS"] == "1"))

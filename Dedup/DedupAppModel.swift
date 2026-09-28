@@ -5,7 +5,14 @@ import Observation
 @MainActor
 @Observable
 final class DedupAppModel {
-    enum Activity: Equatable { case idle, scanning, executing }
+    enum Activity: Equatable { case idle, indexing, analyzing, executing }
+
+    struct LimitPreview: Equatable {
+        let includedFiles: Int
+        let includedBytes: Int64
+        let excludedFiles: Int
+        let excludedBytes: Int64
+    }
 
     var sourceURL: URL?
     var targetURL: URL?
@@ -20,13 +27,23 @@ final class DedupAppModel {
     var lastActivityAt: Date?
     var dryRun = true
     var cleanEmptyFolders = false
+    var limitsSourceFiles = false
+    var maximumSourceFiles = 100
+    var limitsSourceSize = false
+    var maximumSourceGigabytes = 100
+    var limitsIndividualFileSize = false
+    var maximumIndividualFileGigabytes = 100
     var cleanupResult: EmptyFolderCleanupResult?
     var selectedSection: SidebarSection? = .overview
+    var analysisIndex: AnalysisIndex?
 
     private let engine = DeduplicationEngine()
     private let executor = OperationExecutor()
     private let emptyFolderCleaner = EmptyFolderCleaner()
     private var workTask: Task<Void, Never>?
+    private var destinationIndexTask: Task<ScanResult, Error>?
+    private var destinationIndexResult: ScanResult?
+    private var indexGeneration = UUID()
 
     init() {
         sourceURL = Self.restoreBookmark(named: "sourceBookmark")
@@ -53,20 +70,136 @@ final class DedupAppModel {
         resetAnalysis()
     }
 
-    func analyze() {
+    var hasFolderIndex: Bool { analysisIndex != nil }
+
+    var primaryActionTitle: LocalizedStringResource {
+        hasFolderIndex ? "Analyze Checksums" : "Index Folders"
+    }
+
+    var limitPreview: LimitPreview? {
+        guard let analysisIndex else { return nil }
+        let selected = currentLimits.applying(
+            toRecordsSortedByDescendingSize: analysisIndex.sourceResult.records
+        )
+        let selectedBytes = selected.reduce(Int64.zero) { $0 + $1.byteCount }
+        return LimitPreview(
+            includedFiles: selected.count,
+            includedBytes: selectedBytes,
+            excludedFiles: analysisIndex.sourceResult.records.count - selected.count,
+            excludedBytes: analysisIndex.sourceByteCount - selectedBytes
+        )
+    }
+
+    func primaryAction() {
+        if hasFolderIndex {
+            analyzeChecksums()
+        } else {
+            indexFolders()
+        }
+    }
+
+    func indexFolders() {
         guard let sourceURL, let targetURL, activity == .idle else { return }
-        let sourcePath = sourceURL.standardizedFileURL.path(percentEncoded: false)
-        let targetPath = targetURL.standardizedFileURL.path(percentEncoded: false)
-        guard sourcePath != targetPath, !targetPath.hasPrefix(sourcePath + "/") else {
+        guard locationsAreValid(source: sourceURL, target: targetURL) else {
             status = "The target cannot be the source or a folder inside the source."
             return
         }
+        resetAnalysis(keepStatus: true)
+        let generation = indexGeneration
+        activity = .indexing
+        status = "Indexing source folder…"
+        progressCompleted = 0
+        progressTotal = 1
+
+        workTask = Task { [weak self] in
+            guard let self else { return }
+            let sourceAccess = sourceURL.startAccessingSecurityScopedResource()
+            defer {
+                if sourceAccess { sourceURL.stopAccessingSecurityScopedResource() }
+            }
+            do {
+                let sourceResult = try await engine.indexSource(root: sourceURL)
+                try Task.checkCancellation()
+                guard generation == self.indexGeneration else { return }
+
+                let index = AnalysisIndex(
+                    sourceResult: sourceResult,
+                    targetResult: ScanResult(records: [], issues: [])
+                )
+                self.analysisIndex = index
+                self.presetLimits(from: index)
+                self.issues = sourceResult.issues
+                self.progressCompleted = 1
+
+                let smallest = index.smallestSourceFileByteCount ?? 0
+                let largest = index.largestSourceFileByteCount ?? 0
+                let kinds = Set(sourceResult.records.map(\.kind))
+                if kinds.isEmpty {
+                    self.status = "Source index complete: no supported media files found."
+                } else {
+                    self.status = "Source index complete: \(sourceResult.records.count) files, \(ByteCountFormatter.string(fromByteCount: index.sourceByteCount, countStyle: .file)); file sizes \(ByteCountFormatter.string(fromByteCount: smallest, countStyle: .file))–\(ByteCountFormatter.string(fromByteCount: largest, countStyle: .file)). Indexing matching destination folders in the background."
+                }
+                self.startDestinationIndex(
+                    targetURL: targetURL,
+                    kinds: kinds,
+                    generation: generation
+                )
+            } catch is CancellationError {
+                if generation == self.indexGeneration {
+                    self.status = "Indexing cancelled."
+                }
+            } catch {
+                if generation == self.indexGeneration {
+                    self.status = "Indexing failed: \(error.localizedDescription)"
+                }
+            }
+            if generation == self.indexGeneration {
+                self.activity = .idle
+                self.workTask = nil
+            }
+        }
+    }
+
+    private func startDestinationIndex(
+        targetURL: URL,
+        kinds: Set<MediaKind>,
+        generation: UUID
+    ) {
+        destinationIndexTask = Task { [weak self] in
+            guard let self else { throw CancellationError() }
+            let targetAccess = targetURL.startAccessingSecurityScopedResource()
+            defer {
+                if targetAccess { targetURL.stopAccessingSecurityScopedResource() }
+            }
+
+            do {
+                let result = try await engine.indexTarget(root: targetURL, kinds: kinds)
+                try Task.checkCancellation()
+                guard generation == self.indexGeneration else { throw CancellationError() }
+
+                self.destinationIndexResult = result
+                self.issues = (self.analysisIndex?.sourceResult.issues ?? []) + result.issues
+                if self.activity == .idle {
+                    self.status = "Source and matching destination folders are indexed. Set limits, then analyze checksums."
+                }
+                return result
+            } catch {
+                if generation == self.indexGeneration, !(error is CancellationError) {
+                    self.status = "Destination indexing failed: \(error.localizedDescription)"
+                }
+                throw error
+            }
+        }
+    }
+
+    func analyzeChecksums() {
+        guard let sourceURL, let targetURL, let sourceIndex = analysisIndex, activity == .idle else { return }
         report = nil
         plan = nil
         results = []
-        issues = []
-        activity = .scanning
-        status = "Starting analysis…"
+        issues = sourceIndex.sourceResult.issues
+        activity = .analyzing
+        status = "Starting checksum analysis…"
 
         workTask = Task { [weak self] in
             guard let self else { return }
@@ -77,7 +210,23 @@ final class DedupAppModel {
                 if targetAccess { targetURL.stopAccessingSecurityScopedResource() }
             }
             do {
-                let report = try await engine.analyze(source: sourceURL, target: targetURL) { progress in
+                let targetResult: ScanResult
+                if let destinationIndexResult {
+                    targetResult = destinationIndexResult
+                } else if let destinationIndexTask {
+                    self.status = "Waiting for destination indexing to complete…"
+                    targetResult = try await destinationIndexTask.value
+                } else {
+                    throw CancellationError()
+                }
+                try Task.checkCancellation()
+
+                let completedIndex = AnalysisIndex(
+                    sourceResult: sourceIndex.sourceResult,
+                    targetResult: targetResult
+                )
+                self.analysisIndex = completedIndex
+                let report = try await engine.analyze(index: completedIndex, limits: currentLimits) { progress in
                     await MainActor.run {
                         self.status = progress.phase
                         self.progressCompleted = progress.completed
@@ -88,7 +237,10 @@ final class DedupAppModel {
                 self.report = report
                 self.issues = report.issues
                 self.plan = OperationPlanner().makePlan(report: report, sourceRoot: sourceURL, targetRoot: targetURL)
-                self.status = "Analysis complete: \(report.duplicateGroups.count) exact duplicate groups and \(report.uniqueSourceFiles.count) unique source files."
+                let selection = report.isSourceLimited
+                    ? " Selected \(report.sourceFiles.count) files (\(ByteCountFormatter.string(fromByteCount: report.selectedSourceByteCount, countStyle: .file))); excluded \(report.excludedSourceFileCount) files (\(ByteCountFormatter.string(fromByteCount: report.excludedSourceByteCount, countStyle: .file)))."
+                    : ""
+                self.status = "Analysis complete: \(report.duplicateGroups.count) exact duplicate groups and \(report.uniqueSourceFiles.count) unique source files.\(selection)"
                 self.selectedSection = .plan
             } catch is CancellationError {
                 self.status = "Analysis cancelled."
@@ -110,6 +262,11 @@ final class DedupAppModel {
         cleanupResult = nil
         workTask = Task { [weak self] in
             guard let self else { return }
+            defer {
+                self.analysisIndex = nil
+                self.activity = .idle
+                self.workTask = nil
+            }
             let sourceAccess = sourceURL.startAccessingSecurityScopedResource()
             let targetAccess = targetURL.startAccessingSecurityScopedResource()
             defer {
@@ -120,8 +277,6 @@ final class DedupAppModel {
                 try DestinationLayout.ensureDirectories(at: targetURL)
             } catch {
                 self.status = "Could not prepare the destination: \(error.localizedDescription)"
-                self.activity = .idle
-                self.workTask = nil
                 return
             }
             self.progressCompleted = 0
@@ -157,13 +312,12 @@ final class DedupAppModel {
             } else {
                 self.status = isDryRun ? "Dry run complete; no files changed." : "Execution complete: \(output.count(where: \.performed)) verified transfers."
             }
-            self.activity = .idle
-            self.workTask = nil
         }
     }
 
     func cancel() {
         workTask?.cancel()
+        destinationIndexTask?.cancel()
         lastActivityAt = .now
         status = "Cancelling current file safely…"
     }
@@ -214,13 +368,54 @@ final class DedupAppModel {
         status = "Copied the detailed operation report to the clipboard."
     }
 
-    private func resetAnalysis() {
+    private func resetAnalysis(keepStatus: Bool = false) {
+        indexGeneration = UUID()
+        workTask?.cancel()
+        destinationIndexTask?.cancel()
+        workTask = nil
+        destinationIndexTask = nil
+        destinationIndexResult = nil
+        activity = .idle
+        analysisIndex = nil
         report = nil
         plan = nil
         results = []
         cleanupResult = nil
         issues = []
-        status = "Locations changed. Run analysis to create a new plan."
+        if !keepStatus {
+            status = "Locations changed. Index the folders to continue."
+        }
+    }
+
+    private func locationsAreValid(source: URL, target: URL) -> Bool {
+        let sourcePath = source.standardizedFileURL.path(percentEncoded: false)
+        let targetPath = target.standardizedFileURL.path(percentEncoded: false)
+        return sourcePath != targetPath && !targetPath.hasPrefix(sourcePath + "/")
+    }
+
+    private func presetLimits(from index: AnalysisIndex) {
+        maximumSourceFiles = index.sourceResult.records.count
+        maximumSourceGigabytes = Self.gigabytesRoundingUp(index.sourceByteCount)
+        maximumIndividualFileGigabytes = Self.gigabytesRoundingUp(index.largestSourceFileByteCount ?? 0)
+    }
+
+    private static func gigabytesRoundingUp(_ bytes: Int64) -> Int {
+        guard bytes > 0 else { return 0 }
+        return Int(bytes / 1_000_000_000 + (bytes % 1_000_000_000 == 0 ? 0 : 1))
+    }
+
+    private var currentLimits: AnalysisLimits {
+        AnalysisLimits(
+            maximumSourceFiles: limitsSourceFiles ? max(0, maximumSourceFiles) : nil,
+            maximumSourceBytes: limitsSourceSize ? Self.bytes(fromGigabytes: maximumSourceGigabytes) : nil,
+            maximumIndividualSourceFileBytes: limitsIndividualFileSize
+                ? Self.bytes(fromGigabytes: maximumIndividualFileGigabytes)
+                : nil
+        )
+    }
+
+    private static func bytes(fromGigabytes gigabytes: Int) -> Int64 {
+        Int64(min(max(0, gigabytes), Int(Int64.max / 1_000_000_000))) * 1_000_000_000
     }
 
     private func chooseFolder(prompt: String, startingAt currentURL: URL?) -> URL? {
