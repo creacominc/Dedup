@@ -332,7 +332,13 @@ actor DeduplicationEngine {
             for stage in stages {
                 var nextCandidates: [[MediaRecord]] = []
                 for candidateGroup in candidates {
-                    let results = await hashInBatches(candidateGroup, byteCount: stage)
+                    let results = await hashInBatches(
+                        candidateGroup,
+                        byteCount: stage,
+                        completed: min(processed, sourceResult.records.count),
+                        total: sourceResult.records.count,
+                        progress: progress
+                    )
                     var grouped: [String: [MediaRecord]] = [:]
                     for (record, digest, errorMessage) in results {
                         if let digest {
@@ -375,10 +381,26 @@ actor DeduplicationEngine {
         )
     }
 
-    private func hashInBatches(_ records: [MediaRecord], byteCount: Int64) async -> [(MediaRecord, String?, String?)] {
+    private func hashInBatches(
+        _ records: [MediaRecord],
+        byteCount: Int64,
+        completed: Int,
+        total: Int,
+        progress: @escaping @Sendable (AnalysisProgress) async -> Void
+    ) async -> [(MediaRecord, String?, String?)] {
         var output: [(MediaRecord, String?, String?)] = []
         for start in stride(from: 0, to: records.count, by: maximumConcurrentReads) {
             let batch = Array(records[start..<min(start + maximumConcurrentReads, records.count)])
+            if let first = batch.first {
+                let fileSize = ByteCountFormatter.string(fromByteCount: first.byteCount, countStyle: .file)
+                let checkpointSize = ByteCountFormatter.string(fromByteCount: min(byteCount, first.byteCount), countStyle: .file)
+                let additionalFiles = batch.count > 1 ? " + \(batch.count - 1) more" : ""
+                await progress(AnalysisProgress(
+                    phase: "Comparing \(fileSize) files — hashing \(first.displayName)\(additionalFiles) through \(checkpointSize)",
+                    completed: completed,
+                    total: total
+                ))
+            }
             let values = await withTaskGroup(of: (MediaRecord, String?, String?).self) { group in
                 for record in batch {
                     group.addTask { [hasher, cache] in

@@ -208,11 +208,18 @@ struct EngineCoverageTests {
         try await TemporaryFixture.withFixture { fixture in
             try Data([1] + Array(repeating: 0, count: 511)).write(to: fixture.source.appending(path: "one.mov"))
             try Data([2] + Array(repeating: 0, count: 511)).write(to: fixture.target.appending(path: "two.mov"))
+            let recorder = ProgressRecorder()
 
-            let report = try await DeduplicationEngine().analyze(source: fixture.source, target: fixture.target) { _ in }
+            let report = try await DeduplicationEngine().analyze(source: fixture.source, target: fixture.target) { progress in
+                await recorder.append(progress)
+            }
 
             #expect(report.duplicateGroups.isEmpty)
             #expect(report.uniqueSourceFiles.count == 1)
+            let expectedSize = ByteCountFormatter.string(fromByteCount: 512, countStyle: .file)
+            #expect(await recorder.values.contains {
+                $0.phase.contains("one.mov") && $0.phase.contains(expectedSize) && $0.phase.contains("through")
+            })
         }
     }
 }

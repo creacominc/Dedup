@@ -34,14 +34,20 @@ final class DedupAppModel {
     }
 
     func chooseSource() {
-        guard let url = chooseFolder(prompt: "Select a source folder containing media") else { return }
+        guard let url = chooseFolder(
+            prompt: "Select a source folder containing media",
+            startingAt: sourceURL
+        ) else { return }
         sourceURL = url
         Self.saveBookmark(url, named: "sourceBookmark")
         resetAnalysis()
     }
 
     func chooseTarget() {
-        guard let url = chooseFolder(prompt: "Select /Volumes/VideoProjects/Originals") else { return }
+        guard let url = chooseFolder(
+            prompt: "Select /Volumes/VideoProjects/Originals",
+            startingAt: targetURL
+        ) else { return }
         targetURL = url
         Self.saveBookmark(url, named: "targetBookmark")
         resetAnalysis()
@@ -217,13 +223,14 @@ final class DedupAppModel {
         status = "Locations changed. Run analysis to create a new plan."
     }
 
-    private func chooseFolder(prompt: String) -> URL? {
+    private func chooseFolder(prompt: String, startingAt currentURL: URL?) -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
         panel.message = prompt
+        panel.directoryURL = currentURL
         return panel.runModal() == .OK ? panel.url : nil
     }
 
