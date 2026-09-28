@@ -416,6 +416,70 @@ struct ExecutorCoverageTests {
     }
 }
 
+struct EmptyFolderCleanerCoverageTests {
+    @Test func `Dry run simulates leaf-first cleanup without changing the source`() async throws {
+        try await TemporaryFixture.withFixture { fixture in
+            let emptyParent = fixture.source.appending(path: "Empty/Parent", directoryHint: .isDirectory)
+            let emptyLeaf = emptyParent.appending(path: "Leaf", directoryHint: .isDirectory)
+            let nonEmpty = fixture.source.appending(path: "Has Sidecar", directoryHint: .isDirectory)
+            let outside = fixture.root.appending(path: "Outside", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: emptyLeaf, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: nonEmpty, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+            try Data([1]).write(to: nonEmpty.appending(path: ".metadata"))
+            let link = fixture.source.appending(path: "Linked Folder")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+
+            let result = try await EmptyFolderCleaner().clean(root: fixture.source, dryRun: true)
+            let paths = Set(result.folders.map { $0.standardizedFileURL.path() })
+
+            #expect(!result.removed)
+            #expect(paths.contains(emptyLeaf.standardizedFileURL.path()))
+            #expect(paths.contains(emptyParent.standardizedFileURL.path()))
+            #expect(paths.contains(fixture.source.appending(path: "Empty").standardizedFileURL.path()))
+            #expect(!paths.contains(nonEmpty.standardizedFileURL.path()))
+            #expect(!paths.contains(link.standardizedFileURL.path()))
+            #expect(FileManager.default.fileExists(atPath: emptyLeaf.path()))
+            #expect(FileManager.default.fileExists(atPath: fixture.source.path()))
+        }
+    }
+
+    @Test func `Cleanup removes empty descendants but preserves root and folders with files`() async throws {
+        try await TemporaryFixture.withFixture { fixture in
+            let emptyLeaf = fixture.source.appending(path: "Empty/Parent/Leaf", directoryHint: .isDirectory)
+            let nonEmpty = fixture.source.appending(path: "Remaining", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: emptyLeaf, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: nonEmpty, withIntermediateDirectories: true)
+            try Data([1]).write(to: nonEmpty.appending(path: "notes.txt"))
+
+            let result = try await EmptyFolderCleaner().clean(root: fixture.source, dryRun: false)
+
+            #expect(result.removed)
+            #expect(result.folders.count == 3)
+            #expect(!FileManager.default.fileExists(atPath: fixture.source.appending(path: "Empty").path()))
+            #expect(FileManager.default.fileExists(atPath: nonEmpty.path()))
+            #expect(FileManager.default.fileExists(atPath: fixture.source.path()))
+        }
+    }
+
+    @Test func `Cancelled cleanup leaves folders untouched`() async throws {
+        try await TemporaryFixture.withFixture { fixture in
+            let empty = fixture.source.appending(path: "Empty", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+            let task = Task {
+                try await EmptyFolderCleaner().clean(root: fixture.source, dryRun: false)
+            }
+            task.cancel()
+
+            await #expect(throws: CancellationError.self) {
+                _ = try await task.value
+            }
+            #expect(FileManager.default.fileExists(atPath: empty.path()))
+            #expect(FileManager.default.fileExists(atPath: fixture.source.path()))
+        }
+    }
+}
+
 @MainActor
 struct AppModelCoverageTests {
     @Test func `App model defaults to dry run and formats a detailed report`() throws {
@@ -430,8 +494,10 @@ struct AppModelCoverageTests {
         model.plan = OperationPlan(operations: [operation], createdAt: .now)
 
         #expect(model.dryRun)
+        #expect(!model.cleanEmptyFolders)
         #expect(model.result(for: operation) == nil)
         #expect(model.operationReport.contains("DRY RUN"))
+        #expect(model.operationReport.contains("Empty-folder cleanup: DISABLED"))
         #expect(model.operationReport.contains(source.path()))
         #expect(model.operationReport.contains(destination.path()))
         #expect(model.operationReport.contains("Unique content"))

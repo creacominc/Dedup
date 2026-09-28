@@ -139,7 +139,12 @@ private struct OperationPlanView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Toggle("Dry run", isOn: $model.dryRun).help("Report planned actions without changing files.")
+                Toggle("Dry run", isOn: $model.dryRun)
+                    .disabled(model.activity != .idle)
+                    .help("Report planned actions without changing files.")
+                Toggle("Clean empty folders", isOn: $model.cleanEmptyFolders)
+                    .disabled(model.activity != .idle)
+                    .help("After successful processing, remove truly empty source subfolders from the leaves upward. The selected source folder is never removed.")
                 Text(model.dryRun ? "No files will be changed" : "Verified transfers are enabled")
                     .foregroundStyle(model.dryRun ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
                 Spacer()

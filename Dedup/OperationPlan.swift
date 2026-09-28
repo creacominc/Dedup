@@ -132,6 +132,82 @@ struct OperationProgress: Sendable {
     let result: OperationResult?
 }
 
+struct EmptyFolderCleanupResult: Sendable {
+    let folders: [URL]
+    let removed: Bool
+}
+
+actor EmptyFolderCleaner {
+    func clean(
+        root: URL,
+        dryRun: Bool,
+        progress: @escaping @Sendable (String) async -> Void = { _ in }
+    ) async throws -> EmptyFolderCleanupResult {
+        let manager = FileManager.default
+        var directories = try Self.directoriesBeneath(root: root)
+        directories.sort {
+            let leftDepth = $0.pathComponents.count
+            let rightDepth = $1.pathComponents.count
+            return leftDepth == rightDepth ? $0.path() < $1.path() : leftDepth > rightDepth
+        }
+
+        var removablePaths = Set<String>()
+        var folders: [URL] = []
+        for directory in directories {
+            try Task.checkCancellation()
+            let contents = try manager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil,
+                options: []
+            )
+            let isEffectivelyEmpty = contents.allSatisfy {
+                removablePaths.contains($0.standardizedFileURL.path(percentEncoded: false))
+            }
+            guard isEffectivelyEmpty else { continue }
+
+            let path = directory.standardizedFileURL.path(percentEncoded: false)
+            await progress("\(dryRun ? "Would remove" : "Removing") empty folder \(directory.lastPathComponent)…")
+            if !dryRun {
+                try manager.removeItem(at: directory)
+            }
+            removablePaths.insert(path)
+            folders.append(directory)
+        }
+        return EmptyFolderCleanupResult(folders: folders, removed: !dryRun)
+    }
+
+    nonisolated private static func directoriesBeneath(root: URL) throws -> [URL] {
+        let manager = FileManager.default
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .volumeIdentifierKey]
+        let rootValues = try root.resourceValues(forKeys: keys)
+        guard rootValues.isDirectory == true else { throw MediaScannerError.inaccessibleRoot(root) }
+        let rootVolume = String(describing: rootValues.volumeIdentifier)
+        guard let enumerator = manager.enumerator(
+            at: root,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsPackageDescendants],
+            errorHandler: { _, _ in true }
+        ) else {
+            throw MediaScannerError.inaccessibleRoot(root)
+        }
+
+        var directories: [URL] = []
+        for case let url as URL in enumerator {
+            try Task.checkCancellation()
+            let values = try url.resourceValues(forKeys: keys)
+            guard values.isDirectory == true else { continue }
+            let isLink = values.isSymbolicLink == true
+            let isOtherVolume = String(describing: values.volumeIdentifier) != rootVolume
+            if isLink || isOtherVolume {
+                enumerator.skipDescendants()
+                continue
+            }
+            directories.append(url)
+        }
+        return directories
+    }
+}
+
 actor OperationExecutor {
     private let forceVerifiedCopy: Bool
 

@@ -19,10 +19,13 @@ final class DedupAppModel {
     var progressTotal = 0
     var lastActivityAt: Date?
     var dryRun = true
+    var cleanEmptyFolders = false
+    var cleanupResult: EmptyFolderCleanupResult?
     var selectedSection: SidebarSection? = .overview
 
     private let engine = DeduplicationEngine()
     private let executor = OperationExecutor()
+    private let emptyFolderCleaner = EmptyFolderCleaner()
     private var workTask: Task<Void, Never>?
 
     init() {
@@ -93,9 +96,12 @@ final class DedupAppModel {
 
     func executePlan() {
         guard let plan, let sourceURL, let targetURL, activity == .idle else { return }
+        let isDryRun = dryRun
+        let shouldCleanEmptyFolders = cleanEmptyFolders
         activity = .executing
-        status = dryRun ? "Running dry run…" : "Executing verified transfers…"
+        status = isDryRun ? "Running dry run…" : "Executing verified transfers…"
         results = []
+        cleanupResult = nil
         workTask = Task { [weak self] in
             guard let self else { return }
             let sourceAccess = sourceURL.startAccessingSecurityScopedResource()
@@ -114,20 +120,36 @@ final class DedupAppModel {
             }
             self.progressCompleted = 0
             self.progressTotal = plan.operations.count
-            let output = await executor.execute(plan: plan, dryRun: dryRun) { update in
+            let output = await executor.execute(plan: plan, dryRun: isDryRun) { update in
                 await MainActor.run {
                     self.progressCompleted = update.completed
                     self.progressTotal = update.total
                     self.lastActivityAt = .now
-                    self.status = "\(self.dryRun ? "Dry run" : "Executing verified transfers") — \(update.message) (\(update.completed) of \(update.total))"
+                    self.status = "\(isDryRun ? "Dry run" : "Executing verified transfers") — \(update.message) (\(update.completed) of \(update.total))"
                     self.updateResult(for: update.operation, message: update.message, finalResult: update.result)
                 }
             }
             self.results = output
             if Task.isCancelled {
                 self.status = "Execution cancelled. Partial staging data was removed and the source was left unchanged."
+            } else if shouldCleanEmptyFolders && self.completedSuccessfully(plan: plan, results: output, dryRun: isDryRun) {
+                do {
+                    let cleanup = try await self.emptyFolderCleaner.clean(root: sourceURL, dryRun: isDryRun) { message in
+                        await MainActor.run {
+                            self.lastActivityAt = .now
+                            self.status = message
+                        }
+                    }
+                    self.cleanupResult = cleanup
+                    let action = isDryRun ? "would be removed" : "removed"
+                    self.status = "\(isDryRun ? "Dry run complete" : "Execution complete"): \(output.count(where: \.performed)) verified transfers; \(cleanup.folders.count) empty folders \(action)."
+                } catch is CancellationError {
+                    self.status = "Empty-folder cleanup cancelled."
+                } catch {
+                    self.status = "File operations completed, but empty-folder cleanup failed: \(error.localizedDescription)"
+                }
             } else {
-                self.status = dryRun ? "Dry run complete; no files changed." : "Execution complete: \(output.count(where: \.performed)) verified transfers."
+                self.status = isDryRun ? "Dry run complete; no files changed." : "Execution complete: \(output.count(where: \.performed)) verified transfers."
             }
             self.activity = .idle
             self.workTask = nil
@@ -162,6 +184,7 @@ final class DedupAppModel {
             "Source: \(sourceURL?.path(percentEncoded: false) ?? "Not selected")",
             "Destination: \(targetURL?.path(percentEncoded: false) ?? "Not selected")",
             "Operations: \(plan.operations.count)",
+            "Empty-folder cleanup: \(cleanEmptyFolders ? "ENABLED" : "DISABLED")",
             ""
         ]
         let lines = plan.operations.enumerated().map { index, operation in
@@ -169,7 +192,14 @@ final class DedupAppModel {
             let result = result(for: operation)?.message ?? "Not run"
             return "\(index + 1). [\(operation.kind.rawValue)]\n   Source: \(operation.source.path(percentEncoded: false))\n   Destination: \(destination)\n   Size: \(ByteCountFormatter.string(fromByteCount: operation.byteCount, countStyle: .file))\n   Reason: \(operation.explanation)\n   Result: \(result)"
         }
-        return (header + lines).joined(separator: "\n")
+        let cleanupLines: [String]
+        if let cleanupResult {
+            let label = cleanupResult.removed ? "Removed empty folder" : "Would remove empty folder"
+            cleanupLines = ["", "Empty-folder cleanup:"] + cleanupResult.folders.map { "- [\(label)] \($0.path(percentEncoded: false))" }
+        } else {
+            cleanupLines = []
+        }
+        return (header + lines + cleanupLines).joined(separator: "\n")
     }
 
     func copyOperationReport() {
@@ -182,6 +212,7 @@ final class DedupAppModel {
         report = nil
         plan = nil
         results = []
+        cleanupResult = nil
         issues = []
         status = "Locations changed. Run analysis to create a new plan."
     }
@@ -207,6 +238,14 @@ final class DedupAppModel {
         guard let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale) else { return nil }
         if stale { saveBookmark(url, named: key) }
         return url
+    }
+
+    private func completedSuccessfully(plan: OperationPlan, results: [OperationResult], dryRun: Bool) -> Bool {
+        guard results.count == plan.operations.count else { return false }
+        if dryRun { return true }
+        return zip(plan.operations, results).allSatisfy { operation, result in
+            result.performed || operation.kind == .skipExisting || operation.kind == .conflict
+        }
     }
 }
 

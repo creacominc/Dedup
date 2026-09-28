@@ -19,6 +19,7 @@ The application compares file content, not filenames or perceived media quality.
 - Creates `Audio`, `Photos`, and `Videos` destination folders and organizes unique originals as `Media Type/YYYY/MM/DD/filename` using the preserved creation date.
 - Keeps duplicates safe by moving source-side duplicate files into `.Dedup Quarantine` beneath the destination. Quarantined files are not deleted automatically.
 - Generates a deterministic operation plan that can be inspected, dry-run, and copied as a text report before any files change.
+- Optionally removes truly empty source subfolders after the complete operation plan succeeds. Cleanup proceeds from leaf folders upward, never removes the selected source root, and preserves folders containing hidden files, sidecars, unsupported files, symbolic links, or mounted volumes.
 
 ## Safe transfer behavior
 
@@ -49,7 +50,10 @@ The format list controls discovery only. Dedup does not transcode media and does
 3. Select **Analyze**.
 4. Review **Overview**, **Exact Duplicates**, **Operation Plan**, and **Problems**.
 5. Leave **Dry run** enabled and select **Run Dry Run** to preview every result.
-6. Copy the report if desired, disable **Dry run**, and select **Execute Plan**.
+6. Optionally enable **Clean empty folders**. In a dry run, the report lists every folder that would be removed without changing the source.
+7. Copy the report if desired, disable **Dry run**, and select **Execute Plan**.
+
+Empty-folder cleanup runs only after every planned file operation completes successfully. It does not run after cancellation or a transfer failure.
 
 The destination layout is:
 
