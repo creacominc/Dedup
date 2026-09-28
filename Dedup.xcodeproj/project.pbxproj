@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		367D3AE2306A442800CCBE5F /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 367D3AE1306A442800CCBE5F /* README.md */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		36AD7C402E1A0A87000C222A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,6 +28,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		367D3AE1306A442800CCBE5F /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		36AD7C2F2E1A0A85000C222A /* Dedup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dedup.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		36AD7C3F2E1A0A87000C222A /* DedupTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DedupTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		36AD7C492E1A0A87000C222A /* DedupUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DedupUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -93,6 +98,7 @@
 				36AD7C312E1A0A85000C222A /* Dedup */,
 				36AD7C422E1A0A87000C222A /* DedupTests */,
 				36AD7C4C2E1A0A87000C222A /* DedupUITests */,
+				367D3AE1306A442800CCBE5F /* README.md */,
 				36AD7C302E1A0A85000C222A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -227,6 +233,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				367D3AE2306A442800CCBE5F /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

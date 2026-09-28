@@ -116,6 +116,12 @@ The integration test prepares the media roots but does not execute the operation
 - `DedupTests/`: Swift Testing coverage for the engine, planner, executor, models, and external fixture
 - `DedupUITests/`: XCUIAutomation launch coverage
 
+## Disclaimer
+
+Use of Dedup is entirely at your own risk. Always maintain independent, verified backups of all source and destination media before analyzing or executing an operation plan. Although Dedup is designed to avoid destructive changes and to verify cross-filesystem transfers, no software or storage system is infallible.
+
+To the fullest extent permitted by law, the authors, copyright holder, and contributors accept no liability for any loss, corruption, alteration, deletion, unavailability, or other damage to data, storage devices, systems, or consequential losses arising from the use of, or inability to use, this software. You are solely responsible for reviewing operation plans, validating results, and deciding whether the software is appropriate for your data and environment.
+
 ## License
 
 Dedup is open-source software released under the [MIT License](LICENSE).
